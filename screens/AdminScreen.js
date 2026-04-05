@@ -19,9 +19,22 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
 import { isAdminUser } from '../lib/adminConfig';
 import { uploadImageAsset } from '../lib/storage';
-import { buildEventDate, fetchAdminCharityPosts, fetchAdminClinics, fetchAdminEvents } from '../lib/contentService';
+import {
+  buildEventDate,
+  fetchAdminCharityPosts,
+  fetchAdminClinics,
+  fetchAdminEvents,
+} from '../lib/contentService';
 
 const tabs = ['dashboard', 'pets', 'clinics', 'events', 'charity'];
+
+const tabLabels = {
+  dashboard: 'მიმოხილვა',
+  pets: 'ცხოველები',
+  clinics: 'კლინიკები',
+  events: 'ივენთები',
+  charity: 'დახმარება',
+};
 
 const emptyPet = (ownerId = '') => ({
   owner_id: ownerId,
@@ -41,9 +54,44 @@ const emptyPet = (ownerId = '') => ({
   passportUrl: '',
   is_lost: false,
 });
-const emptyClinic = () => ({ name: '', address: '', phone: '', lat: '', lng: '', imageAsset: null, imageUrl: '', is_active: true });
-const emptyEvent = () => ({ title: '', dateText: new Date().toISOString().slice(0, 10), timeText: '12:00', location: '', description: '', imageAsset: null, imageUrl: '', is_published: true });
-const emptyCharity = () => ({ name: '', condition: '', description: '', bank_name: '', iban: '', receiver: '', imageAsset: null, imageUrl: '', urgent: false, status: 'active' });
+const emptyClinic = () => ({
+  name: '',
+  address: '',
+  phone: '',
+  lat: '',
+  lng: '',
+  imageAsset: null,
+  imageUrl: '',
+  is_active: true,
+});
+
+const emptyEvent = () => ({
+  title: '',
+  dateText: new Date().toISOString().slice(0, 10),
+  timeText: '12:00',
+  location: '',
+  description: '',
+  imageAsset: null,
+  imageUrl: '',
+  is_published: true,
+});
+
+const emptyCharity = () => ({
+  name: '',
+  condition: '',
+  description: '',
+  bank_name: '',
+  iban: '',
+  receiver: '',
+  imageAsset: null,
+  imageUrl: '',
+  urgent: false,
+  status: 'active',
+});
+
+function getErrorMessage(error) {
+  return error?.message || 'უცნობი შეცდომა მოხდა.';
+}
 
 function normalizeShortCode(value = '') {
   return value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -55,14 +103,34 @@ function generateShortCode() {
 
 function partsFromDate(value) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return { dateText: new Date().toISOString().slice(0, 10), timeText: '12:00' };
-  return { dateText: date.toISOString().slice(0, 10), timeText: date.toISOString().slice(11, 16) };
+
+  if (Number.isNaN(date.getTime())) {
+    return {
+      dateText: new Date().toISOString().slice(0, 10),
+      timeText: '12:00',
+    };
+  }
+
+  return {
+    dateText: date.toISOString().slice(0, 10),
+    timeText: date.toISOString().slice(11, 16),
+  };
 }
 
 async function pickImage() {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (permission.status !== 'granted') throw new Error('áƒ’áƒáƒšáƒ”áƒ áƒ”áƒ˜áƒ¡ áƒ¬áƒ•áƒ“áƒáƒ›áƒ áƒ¡áƒáƒ­áƒ˜áƒ áƒáƒ.');
-  const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.6, base64: true });
+
+  if (permission.status !== 'granted') {
+    throw new Error('გალერეის წვდომა საჭიროა.');
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    quality: 0.6,
+    base64: true,
+  });
+
   return result.canceled ? null : result.assets[0];
 }
 
@@ -97,13 +165,16 @@ export default function AdminScreen({ session, profile }) {
 
   const canAccess = isAdminUser(session, profile);
 
-  const stats = useMemo(() => ({
-    pets: pets.length,
-    lost: pets.filter((item) => item.is_lost).length,
-    clinics: clinics.length,
-    events: events.filter((item) => item.is_published).length,
-    charity: charityPosts.filter((item) => item.status !== 'completed').length,
-  }), [charityPosts, clinics, events, pets]);
+  const stats = useMemo(
+    () => ({
+      pets: pets.length,
+      lost: pets.filter((item) => item.is_lost).length,
+      clinics: clinics.length,
+      events: events.filter((item) => item.is_published).length,
+      charity: charityPosts.filter((item) => item.status !== 'completed').length,
+    }),
+    [charityPosts, clinics, events, pets]
+  );
 
   useEffect(() => {
     if (!session || !canAccess) {
@@ -113,12 +184,26 @@ export default function AdminScreen({ session, profile }) {
     loadAll();
   }, [canAccess, session]);
 
+  function closeForm() {
+    setFormType(null);
+    setEditing(null);
+  }
+
   async function loadAll(withRefresh = false) {
     if (!session?.user?.id) return;
-    withRefresh ? setRefreshing(true) : setLoading(true);
+
+    if (withRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
     try {
       const [petsResult, clinicsResult, eventsResult, charityResult] = await Promise.all([
-        supabase.from('pets').select('*, profiles(full_name, phone_number)').order('created_at', { ascending: false }),
+        supabase
+          .from('pets')
+          .select('*, profiles(full_name, phone_number)')
+          .order('created_at', { ascending: false }),
         fetchAdminClinics(),
         fetchAdminEvents(),
         fetchAdminCharityPosts(),
@@ -132,7 +217,7 @@ export default function AdminScreen({ session, profile }) {
       setEvents(eventsResult.data || []);
       setCharityPosts(charityResult.data || []);
     } catch (error) {
-      Alert.alert('áƒáƒ“áƒ›áƒ˜áƒœ áƒžáƒáƒœáƒ”áƒšáƒ˜', error.message);
+      Alert.alert('ადმინ პანელი', getErrorMessage(error));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -150,15 +235,77 @@ export default function AdminScreen({ session, profile }) {
   }
 
   function openEdit(type, item) {
-    setEditing({ type, id: item.id, ownerId: item.owner_id || '', originalShortCode: item.short_code || '' });
+    setEditing({
+      type,
+      id: item.id,
+      ownerId: item.owner_id || '',
+      originalShortCode: item.short_code || '',
+    });
     setFormType(type);
-    if (type === 'pet') setPetForm({ owner_id: item.owner_id || session?.user?.id || '', name: item.name || '', breed: item.breed || '', sex: item.sex || '', color: item.color || '', weight: item.weight || '', location: item.location || '', description: item.description || '', birth_date: item.birth_date || '', microchip_id: item.microchip_id || '', short_code: item.short_code || '', photoAsset: null, photoUrl: item.photo_url || '', passportAsset: null, passportUrl: item.passport_photo_url || '', is_lost: Boolean(item.is_lost) });
-    if (type === 'clinic') setClinicForm({ name: item.name || '', address: item.address || '', phone: item.phone || '', lat: item.lat ? String(item.lat) : '', lng: item.lng ? String(item.lng) : '', imageAsset: null, imageUrl: item.image_url || '', is_active: item.is_active !== false });
+
+    if (type === 'pet') {
+      setPetForm({
+        owner_id: item.owner_id || session?.user?.id || '',
+        name: item.name || '',
+        breed: item.breed || '',
+        sex: item.sex || '',
+        color: item.color || '',
+        weight: item.weight || '',
+        location: item.location || '',
+        description: item.description || '',
+        birth_date: item.birth_date || '',
+        microchip_id: item.microchip_id || '',
+        short_code: item.short_code || '',
+        photoAsset: null,
+        photoUrl: item.photo_url || '',
+        passportAsset: null,
+        passportUrl: item.passport_photo_url || '',
+        is_lost: Boolean(item.is_lost),
+      });
+    }
+
+    if (type === 'clinic') {
+      setClinicForm({
+        name: item.name || '',
+        address: item.address || '',
+        phone: item.phone || '',
+        lat: item.lat ? String(item.lat) : '',
+        lng: item.lng ? String(item.lng) : '',
+        imageAsset: null,
+        imageUrl: item.image_url || '',
+        is_active: item.is_active !== false,
+      });
+    }
+
     if (type === 'event') {
       const parts = partsFromDate(item.event_date);
-      setEventForm({ title: item.title || '', dateText: parts.dateText, timeText: parts.timeText, location: item.location || '', description: item.description || '', imageAsset: null, imageUrl: item.image_url || '', is_published: item.is_published !== false });
+
+      setEventForm({
+        title: item.title || '',
+        dateText: parts.dateText,
+        timeText: parts.timeText,
+        location: item.location || '',
+        description: item.description || '',
+        imageAsset: null,
+        imageUrl: item.image_url || '',
+        is_published: item.is_published !== false,
+      });
     }
-    if (type === 'charity') setCharityForm({ name: item.name || '', condition: item.condition || '', description: item.description || '', bank_name: item.bank_name || '', iban: item.iban || '', receiver: item.receiver || '', imageAsset: null, imageUrl: item.image_url || '', urgent: Boolean(item.urgent), status: item.status === 'completed' ? 'completed' : 'active' });
+
+    if (type === 'charity') {
+      setCharityForm({
+        name: item.name || '',
+        condition: item.condition || '',
+        description: item.description || '',
+        bank_name: item.bank_name || '',
+        iban: item.iban || '',
+        receiver: item.receiver || '',
+        imageAsset: null,
+        imageUrl: item.image_url || '',
+        urgent: Boolean(item.urgent),
+        status: item.status === 'completed' ? 'completed' : 'active',
+      });
+    }
   }
 
   async function attachImage(type) {
@@ -171,7 +318,7 @@ export default function AdminScreen({ session, profile }) {
       if (type === 'event') setEventForm((current) => ({ ...current, imageAsset: asset }));
       if (type === 'charity') setCharityForm((current) => ({ ...current, imageAsset: asset }));
     } catch (error) {
-      Alert.alert('áƒ¡áƒ£áƒ áƒáƒ—áƒ˜', error.message);
+      Alert.alert('სურათი', getErrorMessage(error));
     }
   }
 
@@ -180,18 +327,20 @@ export default function AdminScreen({ session, profile }) {
     if (currentId) query = query.neq('id', currentId);
     const { data, error } = await query;
     if (error) throw error;
-    if (data?.length) throw new Error('This Pet ID is already used by another pet.');
+    if (data?.length) throw new Error('ეს Pet ID უკვე გამოყენებულია სხვა ცხოველისთვის.');
   }
 
   async function savePet() {
-    if (!petForm.name.trim()) return Alert.alert('Pet', 'Name is required.');
+    if (!petForm.name.trim()) return Alert.alert('ცხოველი', 'სახელი სავალდებულოა.');
     setSaving(true);
+
     try {
       const ownerId = petForm.owner_id || editing?.ownerId || session?.user?.id;
-      if (!ownerId) throw new Error('Admin session was not found.');
+
+      if (!ownerId) throw new Error('ადმინის სესია ვერ მოიძებნა.');
 
       const shortCode = normalizeShortCode(petForm.short_code) || editing?.originalShortCode || generateShortCode();
-      if (!/^[A-Z0-9]{6}$/.test(shortCode)) throw new Error('Pet ID must be 6 characters.');
+      if (!/^[A-Z0-9]{6}$/.test(shortCode)) throw new Error('Pet ID უნდა იყოს 6 სიმბოლო.');
       await ensurePetCodeIsUnique(shortCode, editing?.type === 'pet' ? editing.id : null);
 
       const photoUrl = petForm.photoAsset ? await uploadImageAsset(petForm.photoAsset, { folder: 'pets/dogs', prefix: 'admin_pet' }) : petForm.photoUrl || null;
@@ -220,18 +369,27 @@ export default function AdminScreen({ session, profile }) {
       await loadAll(true);
       setActiveTab('pets');
       setPetForm(emptyPet(session?.user?.id ?? ''));
-      setEditing(null);
-      setFormType(null);
-      Alert.alert('Pet', editing?.type === 'pet' ? 'Pet updated successfully.' : `Pet ID: ${shortCode}`);
+      closeForm();
+      Alert.alert(
+        'ცხოველი',
+        editing?.type === 'pet'
+          ? 'ცხოველი წარმატებით განახლდა.'
+          : `ცხოველი დაემატა. Pet ID: ${shortCode}`
+      );
     } catch (error) {
-      Alert.alert('Pet save failed', error.message);
+      Alert.alert('ცხოველის შენახვა ვერ მოხერხდა', getErrorMessage(error));
     } finally {
       setSaving(false);
     }
   }
+
   async function saveClinic() {
-    if (!clinicForm.name.trim() || !clinicForm.address.trim()) return Alert.alert('áƒ™áƒšáƒ˜áƒœáƒ˜áƒ™áƒ', 'áƒ¡áƒáƒ®áƒ”áƒšáƒ˜ áƒ“áƒ áƒ›áƒ˜áƒ¡áƒáƒ›áƒáƒ áƒ—áƒ˜ áƒ¡áƒáƒ•áƒáƒšáƒ“áƒ”áƒ‘áƒ£áƒšáƒáƒ.');
+    if (!clinicForm.name.trim() || !clinicForm.address.trim()) {
+      return Alert.alert('კლინიკა', 'სახელი და მისამართი სავალდებულოა.');
+    }
+
     setSaving(true);
+
     try {
       const imageUrl = clinicForm.imageAsset ? await uploadImageAsset(clinicForm.imageAsset, { folder: 'admin/clinics', prefix: 'clinic' }) : clinicForm.imageUrl || null;
       const payload = { name: clinicForm.name.trim(), address: clinicForm.address.trim(), phone: clinicForm.phone.trim(), lat: clinicForm.lat.trim() ? Number(clinicForm.lat) : null, lng: clinicForm.lng.trim() ? Number(clinicForm.lng) : null, image_url: imageUrl, is_active: clinicForm.is_active };
@@ -239,17 +397,22 @@ export default function AdminScreen({ session, profile }) {
       if (result.error) throw result.error;
       await loadAll(true);
       setActiveTab('clinics');
-      setFormType(null);
+      setClinicForm(emptyClinic());
+      closeForm();
     } catch (error) {
-      Alert.alert('áƒ™áƒšáƒ˜áƒœáƒ˜áƒ™áƒ áƒ•áƒ”áƒ  áƒ¨áƒ”áƒ˜áƒœáƒáƒ®áƒ', error.message);
+      Alert.alert('კლინიკის შენახვა ვერ მოხერხდა', getErrorMessage(error));
     } finally {
       setSaving(false);
     }
   }
 
   async function saveEvent() {
-    if (!eventForm.title.trim() || !eventForm.location.trim()) return Alert.alert('áƒ˜áƒ•áƒ”áƒœáƒ—áƒ˜', 'áƒ¡áƒáƒ—áƒáƒ£áƒ áƒ˜ áƒ“áƒ áƒšáƒáƒ™áƒáƒªáƒ˜áƒ áƒ¡áƒáƒ•áƒáƒšáƒ“áƒ”áƒ‘áƒ£áƒšáƒáƒ.');
+    if (!eventForm.title.trim() || !eventForm.location.trim()) {
+      return Alert.alert('ივენთი', 'სათაური და ლოკაცია სავალდებულოა.');
+    }
+
     setSaving(true);
+
     try {
       const imageUrl = eventForm.imageAsset ? await uploadImageAsset(eventForm.imageAsset, { folder: 'admin/events', prefix: 'event' }) : eventForm.imageUrl || null;
       const payload = { title: eventForm.title.trim(), event_date: buildEventDate(eventForm.dateText, eventForm.timeText), location: eventForm.location.trim(), description: eventForm.description.trim(), image_url: imageUrl, is_published: eventForm.is_published };
@@ -257,17 +420,22 @@ export default function AdminScreen({ session, profile }) {
       if (result.error) throw result.error;
       await loadAll(true);
       setActiveTab('events');
-      setFormType(null);
+      setEventForm(emptyEvent());
+      closeForm();
     } catch (error) {
-      Alert.alert('áƒ˜áƒ•áƒ”áƒœáƒ—áƒ˜ áƒ•áƒ”áƒ  áƒ¨áƒ”áƒ˜áƒœáƒáƒ®áƒ', error.message);
+      Alert.alert('ივენთის შენახვა ვერ მოხერხდა', getErrorMessage(error));
     } finally {
       setSaving(false);
     }
   }
 
   async function saveCharity() {
-    if (!charityForm.name.trim() || !charityForm.condition.trim()) return Alert.alert('áƒ“áƒáƒ®áƒ›áƒáƒ áƒ”áƒ‘áƒ˜áƒ¡ áƒžáƒáƒ¡áƒ¢áƒ˜', 'áƒ¡áƒáƒ®áƒ”áƒšáƒ˜ áƒ“áƒ áƒ›áƒ“áƒ’áƒáƒ›áƒáƒ áƒ”áƒáƒ‘áƒ áƒ¡áƒáƒ•áƒáƒšáƒ“áƒ”áƒ‘áƒ£áƒšáƒáƒ.');
+    if (!charityForm.name.trim() || !charityForm.condition.trim()) {
+      return Alert.alert('დახმარების პოსტი', 'სახელი და მდგომარეობა სავალდებულოა.');
+    }
+
     setSaving(true);
+
     try {
       const imageUrl = charityForm.imageAsset ? await uploadImageAsset(charityForm.imageAsset, { folder: 'admin/charity', prefix: 'charity' }) : charityForm.imageUrl || null;
       const payload = { name: charityForm.name.trim(), condition: charityForm.condition.trim(), description: charityForm.description.trim(), bank_name: charityForm.bank_name.trim(), iban: charityForm.iban.trim(), receiver: charityForm.receiver.trim(), image_url: imageUrl, urgent: charityForm.urgent, status: charityForm.status };
@@ -275,9 +443,10 @@ export default function AdminScreen({ session, profile }) {
       if (result.error) throw result.error;
       await loadAll(true);
       setActiveTab('charity');
-      setFormType(null);
+      setCharityForm(emptyCharity());
+      closeForm();
     } catch (error) {
-      Alert.alert('áƒžáƒáƒ¡áƒ¢áƒ˜ áƒ•áƒ”áƒ  áƒ¨áƒ”áƒ˜áƒœáƒáƒ®áƒ', error.message);
+      Alert.alert('პოსტის შენახვა ვერ მოხერხდა', getErrorMessage(error));
     } finally {
       setSaving(false);
     }
@@ -286,12 +455,12 @@ export default function AdminScreen({ session, profile }) {
   function toggleCharityStatus(item) {
     const nextStatus = item.status === 'completed' ? 'active' : 'completed';
     const destinationLabel =
-      nextStatus === 'completed' ? 'áƒ£áƒ™áƒ•áƒ” áƒ“áƒáƒ•áƒ”áƒ®áƒ›áƒáƒ áƒ”áƒ—' : 'áƒ›áƒáƒ— áƒ¨áƒ”áƒœáƒ˜ áƒ“áƒáƒ®áƒ›áƒáƒ áƒ”áƒ‘áƒ áƒ¡áƒ­áƒ˜áƒ áƒ“áƒ”áƒ‘áƒáƒ—';
+      nextStatus === 'completed' ? 'უკვე დავეხმარეთ' : 'მათ შენი დახმარება სჭირდებათ';
 
-    Alert.alert('áƒ“áƒáƒ®áƒ›áƒáƒ áƒ”áƒ‘áƒ˜áƒ¡ áƒžáƒáƒ¡áƒ¢áƒ˜', `áƒ’áƒáƒ“áƒáƒ•áƒ˜áƒ¢áƒáƒœáƒáƒ— "${item.name}" áƒ¡áƒ”áƒ¥áƒªáƒ˜áƒáƒ¨áƒ˜: ${destinationLabel}?`, [
-      { text: 'áƒáƒ áƒ', style: 'cancel' },
+    Alert.alert('დახმარების პოსტი', `გადავიტანოთ "${item.name}" სექციაში: ${destinationLabel}?`, [
+      { text: 'არა', style: 'cancel' },
       {
-        text: 'áƒ“áƒ˜áƒáƒ®',
+        text: 'დიახ',
         onPress: async () => {
           const result = await supabase
             .from('charity_posts')
@@ -299,7 +468,7 @@ export default function AdminScreen({ session, profile }) {
             .eq('id', item.id);
 
           if (result.error) {
-            return Alert.alert('áƒ¡áƒ¢áƒáƒ¢áƒ£áƒ¡áƒ˜', result.error.message);
+            return Alert.alert('სტატუსი', getErrorMessage(result.error));
           }
 
           await loadAll(true);
@@ -309,22 +478,22 @@ export default function AdminScreen({ session, profile }) {
   }
 
   function confirmDelete(table, id, message) {
-    Alert.alert('áƒ¬áƒáƒ¨áƒšáƒ', message, [
-      { text: 'áƒáƒ áƒ', style: 'cancel' },
-      { text: 'áƒ“áƒ˜áƒáƒ®', style: 'destructive', onPress: async () => {
+    Alert.alert('წაშლა', message, [
+      { text: 'არა', style: 'cancel' },
+      { text: 'დიახ', style: 'destructive', onPress: async () => {
         const result = await supabase.from(table).delete().eq('id', id);
-        if (result.error) return Alert.alert('áƒ¬áƒáƒ¨áƒšáƒ', result.error.message);
+        if (result.error) return Alert.alert('წაშლა', getErrorMessage(result.error));
         await loadAll(true);
       } },
     ]);
   }
 
   function toggleLost(item) {
-    Alert.alert('áƒ¡áƒ¢áƒáƒ¢áƒ£áƒ¡áƒ˜', item.is_lost ? 'áƒ›áƒáƒ˜áƒœáƒ˜áƒ¨áƒœáƒáƒ¡ áƒœáƒáƒžáƒáƒ•áƒœáƒáƒ“?' : 'áƒ›áƒáƒ˜áƒœáƒ˜áƒ¨áƒœáƒáƒ¡ áƒ“áƒáƒ™áƒáƒ áƒ’áƒ£áƒšáƒáƒ“?', [
-      { text: 'áƒáƒ áƒ', style: 'cancel' },
-      { text: 'áƒ“áƒ˜áƒáƒ®', onPress: async () => {
+    Alert.alert('სტატუსი', item.is_lost ? 'მოინიშნოს ნაპოვნად?' : 'მოინიშნოს დაკარგულად?', [
+      { text: 'არა', style: 'cancel' },
+      { text: 'დიახ', onPress: async () => {
         const result = await supabase.from('pets').update({ is_lost: !item.is_lost }).eq('id', item.id);
-        if (result.error) return Alert.alert('áƒ¡áƒ¢áƒáƒ¢áƒ£áƒ¡áƒ˜', result.error.message);
+        if (result.error) return Alert.alert('სტატუსი', getErrorMessage(result.error));
         await loadAll(true);
       } },
     ]);
@@ -333,126 +502,230 @@ export default function AdminScreen({ session, profile }) {
   function renderDashboard() {
     return (
       <View>
-        <View style={styles.card}><Text style={styles.cardTitle}>áƒ¡áƒ¬áƒ áƒáƒ¤áƒ˜ áƒ¡áƒ¢áƒáƒ¢áƒ˜áƒ¡áƒ¢áƒ˜áƒ™áƒ</Text><Text style={styles.stat}>áƒªáƒ®áƒáƒ•áƒ”áƒšáƒ”áƒ‘áƒ˜: {stats.pets}</Text><Text style={styles.stat}>áƒ“áƒáƒ™áƒáƒ áƒ’áƒ£áƒšáƒ˜: {stats.lost}</Text><Text style={styles.stat}>áƒ™áƒšáƒ˜áƒœáƒ˜áƒ™áƒ”áƒ‘áƒ˜: {stats.clinics}</Text><Text style={styles.stat}>áƒ˜áƒ•áƒ”áƒœáƒ—áƒ”áƒ‘áƒ˜: {stats.events}</Text><Text style={styles.stat}>áƒáƒ¥áƒ¢áƒ˜áƒ£áƒ áƒ˜ áƒ“áƒáƒ®áƒ›áƒáƒ áƒ”áƒ‘áƒ: {stats.charity}</Text></View>
-        <View style={styles.card}><Text style={styles.cardTitle}>áƒ¡áƒ¬áƒ áƒáƒ¤áƒ˜ áƒ“áƒáƒ›áƒáƒ¢áƒ”áƒ‘áƒ</Text><TouchableOpacity style={styles.action} onPress={() => openCreate('pet')}><Text style={styles.actionText}>áƒªáƒ®áƒáƒ•áƒ”áƒšáƒ˜</Text></TouchableOpacity><TouchableOpacity style={styles.action} onPress={() => openCreate('clinic')}><Text style={styles.actionText}>áƒ™áƒšáƒ˜áƒœáƒ˜áƒ™áƒ˜áƒ¡ áƒ“áƒáƒ›áƒáƒ¢áƒ”áƒ‘áƒ</Text></TouchableOpacity><TouchableOpacity style={styles.action} onPress={() => openCreate('event')}><Text style={styles.actionText}>áƒ˜áƒ•áƒ”áƒœáƒ—áƒ˜áƒ¡ áƒ“áƒáƒ›áƒáƒ¢áƒ”áƒ‘áƒ</Text></TouchableOpacity><TouchableOpacity style={styles.action} onPress={() => openCreate('charity')}><Text style={styles.actionText}>áƒ“áƒáƒ®áƒ›áƒáƒ áƒ”áƒ‘áƒ˜áƒ¡ áƒžáƒáƒ¡áƒ¢áƒ˜áƒ¡ áƒ“áƒáƒ›áƒáƒ¢áƒ”áƒ‘áƒ</Text></TouchableOpacity></View>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>სწრაფი სტატისტიკა</Text>
+          <Text style={styles.stat}>ცხოველები: {stats.pets}</Text>
+          <Text style={styles.stat}>დაკარგული: {stats.lost}</Text>
+          <Text style={styles.stat}>კლინიკები: {stats.clinics}</Text>
+          <Text style={styles.stat}>ივენთები: {stats.events}</Text>
+          <Text style={styles.stat}>აქტიური დახმარება: {stats.charity}</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>სწრაფი დამატება</Text>
+          <TouchableOpacity style={styles.action} onPress={() => openCreate('pet')}>
+            <Text style={styles.actionText}>ცხოველის დამატება</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.action} onPress={() => openCreate('clinic')}>
+            <Text style={styles.actionText}>კლინიკის დამატება</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.action} onPress={() => openCreate('event')}>
+            <Text style={styles.actionText}>ივენთის დამატება</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.action} onPress={() => openCreate('charity')}>
+            <Text style={styles.actionText}>დახმარების პოსტის დამატება</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
   function renderList(items, renderer, emptyTitle) {
-    if (!items.length) return <View style={styles.card}><Text style={styles.empty}>{emptyTitle}</Text></View>;
+    if (!items.length) {
+      return <View style={styles.card}><Text style={styles.empty}>{emptyTitle}</Text></View>;
+    }
+
     return <View style={styles.card}>{items.map(renderer)}</View>;
   }
 
   function renderTabContent() {
     if (activeTab === 'dashboard') return renderDashboard();
-    if (activeTab === 'pets') return renderList(pets, (item) => (
-      <View key={item.id} style={styles.item}>
-        <Image source={{ uri: item.photo_url }} style={styles.thumb} />
-        <View style={styles.itemContent}><Text style={styles.itemTitle}>{item.name}</Text><Text style={styles.itemSubtitle}>{item.profiles?.full_name || 'áƒ£áƒªáƒœáƒáƒ‘áƒ˜ áƒžáƒáƒ¢áƒ áƒáƒœáƒ˜'}</Text><Text style={styles.itemMeta}>{item.short_code || '---'}</Text></View>
-        <View><TouchableOpacity style={styles.smallButton} onPress={() => toggleLost(item)}><Text style={styles.smallButtonText}>{item.is_lost ? 'áƒœáƒáƒžáƒáƒ•áƒœáƒ˜áƒ' : 'áƒ“áƒáƒ™áƒáƒ áƒ’áƒ£áƒšáƒ˜'}</Text></TouchableOpacity><TouchableOpacity style={styles.dangerButton} onPress={() => confirmDelete('pets', item.id, 'áƒªáƒ®áƒáƒ•áƒ”áƒšáƒ˜ áƒ¬áƒáƒ˜áƒ¨áƒáƒšáƒáƒ¡?')}><Text style={styles.dangerButtonText}>áƒ¬áƒáƒ¨áƒšáƒ</Text></TouchableOpacity></View>
-      </View>
-    ), 'áƒªáƒ®áƒáƒ•áƒ”áƒšáƒ”áƒ‘áƒ˜ áƒ¯áƒ”áƒ  áƒáƒ  áƒáƒ áƒ˜áƒ¡');
-    if (activeTab === 'clinics') return renderList(clinics, (item) => (
-      <View key={item.id} style={styles.item}>
-        <Image source={{ uri: item.image_url }} style={styles.thumb} />
-        <View style={styles.itemContent}><Text style={styles.itemTitle}>{item.name}</Text><Text style={styles.itemSubtitle}>{item.address}</Text><Text style={styles.itemMeta}>{item.phone || 'áƒœáƒáƒ›áƒ”áƒ áƒ˜ áƒáƒ áƒáƒ'}</Text></View>
-        <View><TouchableOpacity style={styles.smallButton} onPress={() => openEdit('clinic', item)}><Text style={styles.smallButtonText}>áƒ áƒ”áƒ“áƒáƒ¥áƒ¢áƒ˜áƒ áƒ”áƒ‘áƒ</Text></TouchableOpacity><TouchableOpacity style={styles.dangerButton} onPress={() => confirmDelete('clinics', item.id, 'áƒ™áƒšáƒ˜áƒœáƒ˜áƒ™áƒ áƒ¬áƒáƒ˜áƒ¨áƒáƒšáƒáƒ¡?')}><Text style={styles.dangerButtonText}>áƒ¬áƒáƒ¨áƒšáƒ</Text></TouchableOpacity></View>
-      </View>
-    ), 'áƒ™áƒšáƒ˜áƒœáƒ˜áƒ™áƒ”áƒ‘áƒ˜ áƒ¯áƒ”áƒ  áƒáƒ  áƒáƒ áƒ˜áƒ¡');
-    if (activeTab === 'events') return renderList(events, (item) => (
-      <View key={item.id} style={styles.item}>
-        <Image source={{ uri: item.image_url }} style={styles.thumb} />
-        <View style={styles.itemContent}><Text style={styles.itemTitle}>{item.title}</Text><Text style={styles.itemSubtitle}>{item.location}</Text><Text style={styles.itemMeta}>{item.date || 'áƒ—áƒáƒ áƒ˜áƒ¦áƒ˜ áƒáƒ áƒáƒ'}</Text></View>
-        <View><TouchableOpacity style={styles.smallButton} onPress={() => openEdit('event', item)}><Text style={styles.smallButtonText}>áƒ áƒ”áƒ“áƒáƒ¥áƒ¢áƒ˜áƒ áƒ”áƒ‘áƒ</Text></TouchableOpacity><TouchableOpacity style={styles.dangerButton} onPress={() => confirmDelete('events', item.id, 'áƒ˜áƒ•áƒ”áƒœáƒ—áƒ˜ áƒ¬áƒáƒ˜áƒ¨áƒáƒšáƒáƒ¡?')}><Text style={styles.dangerButtonText}>áƒ¬áƒáƒ¨áƒšáƒ</Text></TouchableOpacity></View>
-      </View>
-    ), 'áƒ˜áƒ•áƒ”áƒœáƒ—áƒ”áƒ‘áƒ˜ áƒ¯áƒ”áƒ  áƒáƒ  áƒáƒ áƒ˜áƒ¡');
+
+    if (activeTab === 'pets') {
+      return renderList(pets, (item) => (
+        <View key={item.id} style={styles.item}>
+          <PreviewImage uri={item.photo_url} label="ფოტო" />
+          <View style={styles.itemContent}>
+            <Text style={styles.itemTitle}>{item.name}</Text>
+            <Text style={styles.itemSubtitle}>{item.profiles?.full_name || 'უცნობი პატრონი'}</Text>
+            <Text style={styles.itemMeta}>{item.short_code || '---'}</Text>
+          </View>
+          <View style={styles.itemActions}>
+            <TouchableOpacity style={styles.smallButton} onPress={() => openEdit('pet', item)}>
+              <Text style={styles.smallButtonText}>რედაქტირება</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.smallButton, item.is_lost && styles.warningButton]}
+              onPress={() => toggleLost(item)}
+            >
+              <Text style={[styles.smallButtonText, item.is_lost && styles.warningButtonText]}>
+                {item.is_lost ? 'ნაპოვნია' : 'დაკარგული'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.dangerButton}
+              onPress={() => confirmDelete('pets', item.id, 'ცხოველი წაიშალოს?')}
+            >
+              <Text style={styles.dangerButtonText}>წაშლა</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ), 'ცხოველები ჯერ არ არის.');
+    }
+
+    if (activeTab === 'clinics') {
+      return renderList(clinics, (item) => (
+        <View key={item.id} style={styles.item}>
+          <PreviewImage uri={item.image_url} label="ფოტო" />
+          <View style={styles.itemContent}>
+            <Text style={styles.itemTitle}>{item.name}</Text>
+            <Text style={styles.itemSubtitle}>{item.address}</Text>
+            <Text style={styles.itemMeta}>{item.phone || 'ნომერი არაა'}</Text>
+          </View>
+          <View style={styles.itemActions}>
+            <TouchableOpacity style={styles.smallButton} onPress={() => openEdit('clinic', item)}>
+              <Text style={styles.smallButtonText}>რედაქტირება</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.dangerButton}
+              onPress={() => confirmDelete('clinics', item.id, 'კლინიკა წაიშალოს?')}
+            >
+              <Text style={styles.dangerButtonText}>წაშლა</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ), 'კლინიკები ჯერ არ არის.');
+    }
+
+    if (activeTab === 'events') {
+      return renderList(events, (item) => (
+        <View key={item.id} style={styles.item}>
+          <PreviewImage uri={item.image_url} label="ფოტო" />
+          <View style={styles.itemContent}>
+            <Text style={styles.itemTitle}>{item.title}</Text>
+            <Text style={styles.itemSubtitle}>{item.location}</Text>
+            <Text style={styles.itemMeta}>{item.date || 'თარიღი უცნობია'}</Text>
+          </View>
+          <View style={styles.itemActions}>
+            <TouchableOpacity style={styles.smallButton} onPress={() => openEdit('event', item)}>
+              <Text style={styles.smallButtonText}>რედაქტირება</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.dangerButton}
+              onPress={() => confirmDelete('events', item.id, 'ივენთი წაიშალოს?')}
+            >
+              <Text style={styles.dangerButtonText}>წაშლა</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ), 'ივენთები ჯერ არ არის.');
+    }
+
     return renderList(charityPosts, (item) => (
       <View key={item.id} style={styles.item}>
-        <Image source={{ uri: item.image_url }} style={styles.thumb} />
-        <View style={styles.itemContent}><Text style={styles.itemTitle}>{item.name}</Text><Text style={styles.itemSubtitle}>{item.condition}</Text><Text style={styles.itemMeta}>{item.status === 'completed' ? 'áƒ“áƒáƒ¡áƒ áƒ£áƒšáƒ”áƒ‘áƒ£áƒšáƒ˜' : 'áƒáƒ¥áƒ¢áƒ˜áƒ£áƒ áƒ˜'}</Text></View>
-        <View><TouchableOpacity style={styles.smallButton} onPress={() => openEdit('charity', item)}><Text style={styles.smallButtonText}>რედაქტირება</Text></TouchableOpacity><TouchableOpacity style={styles.statusButton} onPress={() => toggleCharityStatus(item)}><Text style={styles.statusButtonText}>{item.status === 'completed' ? 'აქტიურში დაბრუნება' : 'უკვე დავეხმარეთ'}</Text></TouchableOpacity><TouchableOpacity style={styles.dangerButton} onPress={() => confirmDelete('charity_posts', item.id, 'პოსტი წაიშალოს?')}><Text style={styles.dangerButtonText}>წაშლა</Text></TouchableOpacity></View>
+        <PreviewImage uri={item.image_url} label="ფოტო" />
+        <View style={styles.itemContent}>
+          <Text style={styles.itemTitle}>{item.name}</Text>
+          <Text style={styles.itemSubtitle}>{item.condition}</Text>
+          <Text style={styles.itemMeta}>{item.status === 'completed' ? 'დასრულებული' : 'აქტიური'}</Text>
+        </View>
+        <View style={styles.itemActions}>
+          <TouchableOpacity style={styles.smallButton} onPress={() => openEdit('charity', item)}>
+            <Text style={styles.smallButtonText}>რედაქტირება</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.statusButton} onPress={() => toggleCharityStatus(item)}>
+            <Text style={styles.statusButtonText}>
+              {item.status === 'completed' ? 'აქტიურში დაბრუნება' : 'უკვე დავეხმარეთ'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.dangerButton}
+            onPress={() => confirmDelete('charity_posts', item.id, 'პოსტი წაიშალოს?')}
+          >
+            <Text style={styles.dangerButtonText}>წაშლა</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    ), 'áƒžáƒáƒ¡áƒ¢áƒ”áƒ‘áƒ˜ áƒ¯áƒ”áƒ  áƒáƒ  áƒáƒ áƒ˜áƒ¡');
+    ), 'პოსტები ჯერ არ არის.');
   }
 
   function renderImagePicker(previewUri, onPress) {
-    return <TouchableOpacity style={styles.imageBox} onPress={onPress}>{previewUri ? <Image source={{ uri: previewUri }} style={styles.imageBoxImg} /> : <Text style={styles.imageBoxText}>áƒ¤áƒáƒ¢áƒáƒ¡ áƒáƒ¢áƒ•áƒ˜áƒ áƒ—áƒ•áƒ</Text>}</TouchableOpacity>;
+    return <TouchableOpacity style={styles.imageBox} onPress={onPress}>{previewUri ? <Image source={{ uri: previewUri }} style={styles.imageBoxImg} /> : <Text style={styles.imageBoxText}>ფოტოს ატვირთვა</Text>}</TouchableOpacity>;
   }
 
   function renderPetForm() {
     return <ScrollView contentContainerStyle={styles.formContent}>
-      <Text style={styles.formTitle}>{editing?.type === 'pet' ? 'Edit Pet' : 'Add Pet'}</Text>
-      <Text style={styles.helperText}>The new pet will be saved under the current admin account.</Text>
-      <Text style={styles.inputLabel}>Main photo</Text>
+      <Text style={styles.formTitle}>{editing?.type === 'pet' ? 'ცხოველის რედაქტირება' : 'ცხოველის დამატება'}</Text>
+      <Text style={styles.helperText}>ახალი ცხოველი მიმდინარე ადმინის ანგარიშზე შეინახება.</Text>
+      <Text style={styles.inputLabel}>მთავარი ფოტო</Text>
       {renderImagePicker(petForm.photoAsset?.uri || petForm.photoUrl, () => attachImage('pet-photo'))}
-      <Text style={styles.inputLabel}>Passport photo</Text>
+      <Text style={styles.inputLabel}>პასპორტის ფოტო</Text>
       {renderImagePicker(petForm.passportAsset?.uri || petForm.passportUrl, () => attachImage('pet-passport'))}
-      <TextInput style={styles.input} placeholder="Name" value={petForm.name} onChangeText={(value) => setPetForm((current) => ({ ...current, name: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="Breed" value={petForm.breed} onChangeText={(value) => setPetForm((current) => ({ ...current, breed: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="Sex" value={petForm.sex} onChangeText={(value) => setPetForm((current) => ({ ...current, sex: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="Color" value={petForm.color} onChangeText={(value) => setPetForm((current) => ({ ...current, color: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="Weight" value={petForm.weight} onChangeText={(value) => setPetForm((current) => ({ ...current, weight: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="Location" value={petForm.location} onChangeText={(value) => setPetForm((current) => ({ ...current, location: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="Birth date (YYYY-MM-DD)" value={petForm.birth_date} onChangeText={(value) => setPetForm((current) => ({ ...current, birth_date: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="Microchip ID" value={petForm.microchip_id} onChangeText={(value) => setPetForm((current) => ({ ...current, microchip_id: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="სახელი" value={petForm.name} onChangeText={(value) => setPetForm((current) => ({ ...current, name: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="ჯიში" value={petForm.breed} onChangeText={(value) => setPetForm((current) => ({ ...current, breed: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="სქესი" value={petForm.sex} onChangeText={(value) => setPetForm((current) => ({ ...current, sex: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="ფერი" value={petForm.color} onChangeText={(value) => setPetForm((current) => ({ ...current, color: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="წონა" value={petForm.weight} onChangeText={(value) => setPetForm((current) => ({ ...current, weight: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="მდებარეობა" value={petForm.location} onChangeText={(value) => setPetForm((current) => ({ ...current, location: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="დაბადების თარიღი (YYYY-MM-DD)" value={petForm.birth_date} onChangeText={(value) => setPetForm((current) => ({ ...current, birth_date: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="მიკროჩიპის ნომერი" value={petForm.microchip_id} onChangeText={(value) => setPetForm((current) => ({ ...current, microchip_id: value }))} placeholderTextColor="#98a3a0" />
       <TextInput style={styles.input} placeholder="Pet ID (AB12CD)" maxLength={6} autoCapitalize="characters" value={petForm.short_code} onChangeText={(value) => setPetForm((current) => ({ ...current, short_code: normalizeShortCode(value) }))} placeholderTextColor="#98a3a0" />
-      <Text style={styles.helperText}>Leave Pet ID empty if you want it generated automatically.</Text>
-      <TextInput style={[styles.input, styles.textArea]} placeholder="Description" value={petForm.description} onChangeText={(value) => setPetForm((current) => ({ ...current, description: value }))} multiline placeholderTextColor="#98a3a0" />
-      <View style={styles.switchRow}><Text style={styles.switchText}>Mark as lost</Text><Switch value={petForm.is_lost} onValueChange={(value) => setPetForm((current) => ({ ...current, is_lost: value }))} /></View>
-      <TouchableOpacity style={styles.saveButton} onPress={savePet} disabled={saving}><Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save'}</Text></TouchableOpacity>
+      <Text style={styles.helperText}>თუ გინდა, რომ Pet ID ავტომატურად დაგენერირდეს, ეს ველი ცარიელი დატოვე.</Text>
+      <TextInput style={[styles.input, styles.textArea]} placeholder="აღწერა" value={petForm.description} onChangeText={(value) => setPetForm((current) => ({ ...current, description: value }))} multiline placeholderTextColor="#98a3a0" />
+      <View style={styles.switchRow}><Text style={styles.switchText}>დაკარგულად მონიშვნა</Text><Switch value={petForm.is_lost} onValueChange={(value) => setPetForm((current) => ({ ...current, is_lost: value }))} /></View>
+      <TouchableOpacity style={styles.saveButton} onPress={savePet} disabled={saving}><Text style={styles.saveButtonText}>{saving ? 'ინახება...' : 'შენახვა'}</Text></TouchableOpacity>
     </ScrollView>;
   }
   function renderClinicForm() {
     return <ScrollView contentContainerStyle={styles.formContent}>
-      <Text style={styles.formTitle}>{editing ? 'áƒ™áƒšáƒ˜áƒœáƒ˜áƒ™áƒ˜áƒ¡ áƒ áƒ”áƒ“áƒáƒ¥áƒ¢áƒ˜áƒ áƒ”áƒ‘áƒ' : 'áƒ™áƒšáƒ˜áƒœáƒ˜áƒ™áƒ˜áƒ¡ áƒ“áƒáƒ›áƒáƒ¢áƒ”áƒ‘áƒ'}</Text>
+      <Text style={styles.formTitle}>{editing?.type === 'clinic' ? 'კლინიკის რედაქტირება' : 'კლინიკის დამატება'}</Text>
       {renderImagePicker(clinicForm.imageAsset?.uri || clinicForm.imageUrl, () => attachImage('clinic'))}
-      <TextInput style={styles.input} placeholder="áƒ¡áƒáƒ®áƒ”áƒšáƒ˜" value={clinicForm.name} onChangeText={(value) => setClinicForm((current) => ({ ...current, name: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="áƒ›áƒ˜áƒ¡áƒáƒ›áƒáƒ áƒ—áƒ˜" value={clinicForm.address} onChangeText={(value) => setClinicForm((current) => ({ ...current, address: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="áƒ¢áƒ”áƒšáƒ”áƒ¤áƒáƒœáƒ˜" value={clinicForm.phone} onChangeText={(value) => setClinicForm((current) => ({ ...current, phone: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="სახელი" value={clinicForm.name} onChangeText={(value) => setClinicForm((current) => ({ ...current, name: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="მისამართი" value={clinicForm.address} onChangeText={(value) => setClinicForm((current) => ({ ...current, address: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="ტელეფონი" value={clinicForm.phone} onChangeText={(value) => setClinicForm((current) => ({ ...current, phone: value }))} placeholderTextColor="#98a3a0" />
       <TextInput style={styles.input} placeholder="Latitude" value={clinicForm.lat} onChangeText={(value) => setClinicForm((current) => ({ ...current, lat: value }))} keyboardType="numbers-and-punctuation" placeholderTextColor="#98a3a0" />
       <TextInput style={styles.input} placeholder="Longitude" value={clinicForm.lng} onChangeText={(value) => setClinicForm((current) => ({ ...current, lng: value }))} keyboardType="numbers-and-punctuation" placeholderTextColor="#98a3a0" />
-      <View style={styles.switchRow}><Text style={styles.switchText}>áƒáƒ¥áƒ¢áƒ˜áƒ£áƒ áƒ˜ áƒ™áƒšáƒ˜áƒœáƒ˜áƒ™áƒ</Text><Switch value={clinicForm.is_active} onValueChange={(value) => setClinicForm((current) => ({ ...current, is_active: value }))} /></View>
-      <TouchableOpacity style={styles.saveButton} onPress={saveClinic} disabled={saving}><Text style={styles.saveButtonText}>{saving ? 'áƒ˜áƒœáƒáƒ®áƒ”áƒ‘áƒ...' : 'áƒ¨áƒ”áƒœáƒáƒ®áƒ•áƒ'}</Text></TouchableOpacity>
+      <View style={styles.switchRow}><Text style={styles.switchText}>აქტიური კლინიკა</Text><Switch value={clinicForm.is_active} onValueChange={(value) => setClinicForm((current) => ({ ...current, is_active: value }))} /></View>
+      <TouchableOpacity style={styles.saveButton} onPress={saveClinic} disabled={saving}><Text style={styles.saveButtonText}>{saving ? 'ინახება...' : 'შენახვა'}</Text></TouchableOpacity>
     </ScrollView>;
   }
 
   function renderEventForm() {
     return <ScrollView contentContainerStyle={styles.formContent}>
-      <Text style={styles.formTitle}>{editing ? 'áƒ˜áƒ•áƒ”áƒœáƒ—áƒ˜áƒ¡ áƒ áƒ”áƒ“áƒáƒ¥áƒ¢áƒ˜áƒ áƒ”áƒ‘áƒ' : 'áƒ˜áƒ•áƒ”áƒœáƒ—áƒ˜áƒ¡ áƒ“áƒáƒ›áƒáƒ¢áƒ”áƒ‘áƒ'}</Text>
+      <Text style={styles.formTitle}>{editing?.type === 'event' ? 'ივენთის რედაქტირება' : 'ივენთის დამატება'}</Text>
       {renderImagePicker(eventForm.imageAsset?.uri || eventForm.imageUrl, () => attachImage('event'))}
-      <TextInput style={styles.input} placeholder="áƒ¡áƒáƒ—áƒáƒ£áƒ áƒ˜" value={eventForm.title} onChangeText={(value) => setEventForm((current) => ({ ...current, title: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="სათაური" value={eventForm.title} onChangeText={(value) => setEventForm((current) => ({ ...current, title: value }))} placeholderTextColor="#98a3a0" />
       <TextInput style={styles.input} placeholder="YYYY-MM-DD" value={eventForm.dateText} onChangeText={(value) => setEventForm((current) => ({ ...current, dateText: value }))} placeholderTextColor="#98a3a0" />
       <TextInput style={styles.input} placeholder="14:00" value={eventForm.timeText} onChangeText={(value) => setEventForm((current) => ({ ...current, timeText: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="áƒšáƒáƒ™áƒáƒªáƒ˜áƒ" value={eventForm.location} onChangeText={(value) => setEventForm((current) => ({ ...current, location: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={[styles.input, styles.textArea]} placeholder="áƒáƒ¦áƒ¬áƒ”áƒ áƒ" value={eventForm.description} onChangeText={(value) => setEventForm((current) => ({ ...current, description: value }))} multiline placeholderTextColor="#98a3a0" />
-      <View style={styles.switchRow}><Text style={styles.switchText}>áƒ’áƒáƒ›áƒáƒ¥áƒ•áƒ”áƒ§áƒœáƒ”áƒ‘áƒ£áƒšáƒ˜</Text><Switch value={eventForm.is_published} onValueChange={(value) => setEventForm((current) => ({ ...current, is_published: value }))} /></View>
-      <TouchableOpacity style={styles.saveButton} onPress={saveEvent} disabled={saving}><Text style={styles.saveButtonText}>{saving ? 'áƒ˜áƒœáƒáƒ®áƒ”áƒ‘áƒ...' : 'áƒ¨áƒ”áƒœáƒáƒ®áƒ•áƒ'}</Text></TouchableOpacity>
+      <TextInput style={styles.input} placeholder="ლოკაცია" value={eventForm.location} onChangeText={(value) => setEventForm((current) => ({ ...current, location: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={[styles.input, styles.textArea]} placeholder="აღწერა" value={eventForm.description} onChangeText={(value) => setEventForm((current) => ({ ...current, description: value }))} multiline placeholderTextColor="#98a3a0" />
+      <View style={styles.switchRow}><Text style={styles.switchText}>გამოქვეყნებული</Text><Switch value={eventForm.is_published} onValueChange={(value) => setEventForm((current) => ({ ...current, is_published: value }))} /></View>
+      <TouchableOpacity style={styles.saveButton} onPress={saveEvent} disabled={saving}><Text style={styles.saveButtonText}>{saving ? 'ინახება...' : 'შენახვა'}</Text></TouchableOpacity>
     </ScrollView>;
   }
 
   function renderCharityForm() {
     return <ScrollView contentContainerStyle={styles.formContent}>
-      <Text style={styles.formTitle}>{editing ? 'áƒžáƒáƒ¡áƒ¢áƒ˜áƒ¡ áƒ áƒ”áƒ“áƒáƒ¥áƒ¢áƒ˜áƒ áƒ”áƒ‘áƒ' : 'áƒ“áƒáƒ®áƒ›áƒáƒ áƒ”áƒ‘áƒ˜áƒ¡ áƒžáƒáƒ¡áƒ¢áƒ˜áƒ¡ áƒ“áƒáƒ›áƒáƒ¢áƒ”áƒ‘áƒ'}</Text>
+      <Text style={styles.formTitle}>{editing?.type === 'charity' ? 'დახმარების პოსტის რედაქტირება' : 'დახმარების პოსტის დამატება'}</Text>
       {renderImagePicker(charityForm.imageAsset?.uri || charityForm.imageUrl, () => attachImage('charity'))}
-      <TextInput style={styles.input} placeholder="áƒ¡áƒáƒ®áƒ”áƒšáƒ˜" value={charityForm.name} onChangeText={(value) => setCharityForm((current) => ({ ...current, name: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="áƒ›áƒ“áƒ’áƒáƒ›áƒáƒ áƒ”áƒáƒ‘áƒ" value={charityForm.condition} onChangeText={(value) => setCharityForm((current) => ({ ...current, condition: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={[styles.input, styles.textArea]} placeholder="áƒáƒ¦áƒ¬áƒ”áƒ áƒ" value={charityForm.description} onChangeText={(value) => setCharityForm((current) => ({ ...current, description: value }))} multiline placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="áƒ‘áƒáƒœáƒ™áƒ˜" value={charityForm.bank_name} onChangeText={(value) => setCharityForm((current) => ({ ...current, bank_name: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="სახელი" value={charityForm.name} onChangeText={(value) => setCharityForm((current) => ({ ...current, name: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="მდგომარეობა" value={charityForm.condition} onChangeText={(value) => setCharityForm((current) => ({ ...current, condition: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={[styles.input, styles.textArea]} placeholder="აღწერა" value={charityForm.description} onChangeText={(value) => setCharityForm((current) => ({ ...current, description: value }))} multiline placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="ბანკი" value={charityForm.bank_name} onChangeText={(value) => setCharityForm((current) => ({ ...current, bank_name: value }))} placeholderTextColor="#98a3a0" />
       <TextInput style={styles.input} placeholder="IBAN" value={charityForm.iban} onChangeText={(value) => setCharityForm((current) => ({ ...current, iban: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="áƒ›áƒ˜áƒ›áƒ¦áƒ”áƒ‘áƒ˜" value={charityForm.receiver} onChangeText={(value) => setCharityForm((current) => ({ ...current, receiver: value }))} placeholderTextColor="#98a3a0" />
-      <View style={styles.switchRow}><Text style={styles.switchText}>áƒ¡áƒáƒ¡áƒ¬áƒ áƒáƒ¤áƒ</Text><Switch value={charityForm.urgent} onValueChange={(value) => setCharityForm((current) => ({ ...current, urgent: value }))} /></View>
-      <View style={styles.segmentButtons}><TouchableOpacity style={[styles.segment, charityForm.status === 'active' && styles.segmentActive]} onPress={() => setCharityForm((current) => ({ ...current, status: 'active' }))}><Text style={[styles.segmentText, charityForm.status === 'active' && styles.segmentTextActive]}>áƒáƒ¥áƒ¢áƒ˜áƒ£áƒ áƒ˜</Text></TouchableOpacity><TouchableOpacity style={[styles.segment, charityForm.status === 'completed' && styles.segmentActive]} onPress={() => setCharityForm((current) => ({ ...current, status: 'completed' }))}><Text style={[styles.segmentText, charityForm.status === 'completed' && styles.segmentTextActive]}>áƒ“áƒáƒ¡áƒ áƒ£áƒšáƒ”áƒ‘áƒ£áƒšáƒ˜</Text></TouchableOpacity></View>
-      <TouchableOpacity style={styles.saveButton} onPress={saveCharity} disabled={saving}><Text style={styles.saveButtonText}>{saving ? 'áƒ˜áƒœáƒáƒ®áƒ”áƒ‘áƒ...' : 'áƒ¨áƒ”áƒœáƒáƒ®áƒ•áƒ'}</Text></TouchableOpacity>
+      <TextInput style={styles.input} placeholder="მიმღები" value={charityForm.receiver} onChangeText={(value) => setCharityForm((current) => ({ ...current, receiver: value }))} placeholderTextColor="#98a3a0" />
+      <View style={styles.switchRow}><Text style={styles.switchText}>სასწრაფო</Text><Switch value={charityForm.urgent} onValueChange={(value) => setCharityForm((current) => ({ ...current, urgent: value }))} /></View>
+      <View style={styles.segmentButtons}><TouchableOpacity style={[styles.segment, charityForm.status === 'active' && styles.segmentActive]} onPress={() => setCharityForm((current) => ({ ...current, status: 'active' }))}><Text style={[styles.segmentText, charityForm.status === 'active' && styles.segmentTextActive]}>აქტიური</Text></TouchableOpacity><TouchableOpacity style={[styles.segment, charityForm.status === 'completed' && styles.segmentActive]} onPress={() => setCharityForm((current) => ({ ...current, status: 'completed' }))}><Text style={[styles.segmentText, charityForm.status === 'completed' && styles.segmentTextActive]}>დასრულებული</Text></TouchableOpacity></View>
+      <TouchableOpacity style={styles.saveButton} onPress={saveCharity} disabled={saving}><Text style={styles.saveButtonText}>{saving ? 'ინახება...' : 'შენახვა'}</Text></TouchableOpacity>
     </ScrollView>;
   }
 
-  if (!canAccess) return <SafeAreaView style={styles.safe}><View style={styles.center}><Text style={styles.title}>áƒáƒ“áƒ›áƒ˜áƒœ áƒ¬áƒ•áƒ“áƒáƒ›áƒ áƒáƒ  áƒ’áƒáƒ¥áƒ•áƒ¡</Text><Text style={styles.subtitle}>áƒ”áƒ¡ áƒ’áƒ•áƒ”áƒ áƒ“áƒ˜ áƒ›áƒ®áƒáƒšáƒáƒ“ áƒáƒ“áƒ›áƒ˜áƒœáƒ˜áƒ¡áƒ¢áƒ áƒáƒ¢áƒáƒ áƒ˜áƒ¡áƒ—áƒ•áƒ˜áƒ¡áƒáƒ.</Text></View></SafeAreaView>;
+  if (!canAccess) return <SafeAreaView style={styles.safe}><View style={styles.center}><Text style={styles.title}>ადმინის წვდომა არ გაქვს</Text><Text style={styles.subtitle}>ეს გვერდი მხოლოდ ადმინისტრატორისთვისაა.</Text></View></SafeAreaView>;
   if (loading) return <SafeAreaView style={styles.safe}><View style={styles.center}><ActivityIndicator size="large" color="#2e8b57" /></View></SafeAreaView>;
 
-  return <SafeAreaView style={styles.safe} edges={['top']}><View style={styles.header}><View><Text style={styles.title}>Admin Panel</Text><Text style={styles.subtitle}>áƒ›áƒáƒ áƒ—áƒ” áƒáƒžáƒ˜ áƒ¢áƒ”áƒšáƒ”áƒ¤áƒáƒœáƒ˜áƒ“áƒáƒœ</Text></View><TouchableOpacity style={styles.refresh} onPress={() => loadAll(true)}><Text style={styles.refreshText}>{refreshing ? '...' : 'áƒ’áƒáƒœáƒáƒ®áƒšáƒ”áƒ‘áƒ'}</Text></TouchableOpacity></View><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>{tabs.map((item) => <TouchableOpacity key={item} style={[styles.tab, activeTab === item && styles.tabActive]} onPress={() => setActiveTab(item)}><Text style={[styles.tabText, activeTab === item && styles.tabTextActive]}>{item}</Text></TouchableOpacity>)}</ScrollView><ScrollView contentContainerStyle={styles.content}>{renderTabContent()}</ScrollView><TouchableOpacity style={styles.fab} onPress={() => activeTab === 'pets' ? openCreate('pet') : setSheetOpen(true)}><Text style={styles.fabText}>+</Text></TouchableOpacity>
-    <Modal visible={sheetOpen} transparent animationType="fade"><View style={styles.overlay}><TouchableOpacity style={styles.backdrop} onPress={() => setSheetOpen(false)} /><View style={styles.sheet}><Text style={styles.cardTitle}>áƒ“áƒáƒ›áƒáƒ¢áƒ”áƒ‘áƒ</Text><TouchableOpacity style={styles.action} onPress={() => openCreate('pet')}><Text style={styles.actionText}>áƒªáƒ®áƒáƒ•áƒ”áƒšáƒ˜</Text></TouchableOpacity><TouchableOpacity style={styles.action} onPress={() => openCreate('clinic')}><Text style={styles.actionText}>áƒ™áƒšáƒ˜áƒœáƒ˜áƒ™áƒ</Text></TouchableOpacity><TouchableOpacity style={styles.action} onPress={() => openCreate('event')}><Text style={styles.actionText}>áƒ˜áƒ•áƒ”áƒœáƒ—áƒ˜</Text></TouchableOpacity><TouchableOpacity style={styles.action} onPress={() => openCreate('charity')}><Text style={styles.actionText}>áƒ“áƒáƒ®áƒ›áƒáƒ áƒ”áƒ‘áƒ˜áƒ¡ áƒžáƒáƒ¡áƒ¢áƒ˜</Text></TouchableOpacity><TouchableOpacity onPress={() => setSheetOpen(false)}><Text style={styles.cancel}>áƒ’áƒáƒ£áƒ¥áƒ›áƒ”áƒ‘áƒ</Text></TouchableOpacity></View></View></Modal>
-    <Modal visible={Boolean(formType)} animationType="slide"><KeyboardAvoidingView style={styles.modal} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><View style={styles.modalHeader}><Text style={styles.cardTitle}>áƒ¨áƒ”áƒ•áƒ¡áƒ”áƒ‘áƒ</Text><TouchableOpacity onPress={() => setFormType(null)}><Text style={styles.refreshText}>áƒ“áƒáƒ®áƒ£áƒ áƒ•áƒ</Text></TouchableOpacity></View>{formType === 'pet' && renderPetForm()}{formType === 'clinic' && renderClinicForm()}{formType === 'event' && renderEventForm()}{formType === 'charity' && renderCharityForm()}</KeyboardAvoidingView></Modal>
+  return <SafeAreaView style={styles.safe} edges={['top']}><View style={styles.header}><View><Text style={styles.title}>ადმინ პანელი</Text><Text style={styles.subtitle}>მართე აპი ტელეფონიდან</Text></View><TouchableOpacity style={styles.refresh} onPress={() => loadAll(true)}><Text style={styles.refreshButtonText}>{refreshing ? '...' : 'განახლება'}</Text></TouchableOpacity></View><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>{tabs.map((item) => <TouchableOpacity key={item} style={[styles.tab, activeTab === item && styles.tabActive]} onPress={() => setActiveTab(item)}><Text style={[styles.tabText, activeTab === item && styles.tabTextActive]}>{tabLabels[item]}</Text></TouchableOpacity>)}</ScrollView><ScrollView contentContainerStyle={styles.content}>{renderTabContent()}</ScrollView><TouchableOpacity style={styles.fab} onPress={() => activeTab === 'pets' ? openCreate('pet') : setSheetOpen(true)}><Text style={styles.fabText}>+</Text></TouchableOpacity>
+    <Modal visible={sheetOpen} transparent animationType="fade"><View style={styles.overlay}><TouchableOpacity style={styles.backdrop} onPress={() => setSheetOpen(false)} /><View style={styles.sheet}><Text style={styles.cardTitle}>დამატება</Text><TouchableOpacity style={styles.action} onPress={() => openCreate('pet')}><Text style={styles.actionText}>ცხოველი</Text></TouchableOpacity><TouchableOpacity style={styles.action} onPress={() => openCreate('clinic')}><Text style={styles.actionText}>კლინიკა</Text></TouchableOpacity><TouchableOpacity style={styles.action} onPress={() => openCreate('event')}><Text style={styles.actionText}>ივენთი</Text></TouchableOpacity><TouchableOpacity style={styles.action} onPress={() => openCreate('charity')}><Text style={styles.actionText}>დახმარების პოსტი</Text></TouchableOpacity><TouchableOpacity onPress={() => setSheetOpen(false)}><Text style={styles.cancel}>გაუქმება</Text></TouchableOpacity></View></View></Modal>
+    <Modal visible={Boolean(formType)} animationType="slide"><KeyboardAvoidingView style={styles.modal} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><View style={styles.modalHeader}><Text style={styles.cardTitle}>შევსება</Text><TouchableOpacity onPress={closeForm}><Text style={styles.linkText}>დახურვა</Text></TouchableOpacity></View>{formType === 'pet' && renderPetForm()}{formType === 'clinic' && renderClinicForm()}{formType === 'event' && renderEventForm()}{formType === 'charity' && renderCharityForm()}</KeyboardAvoidingView></Modal>
   </SafeAreaView>;
 }
 
@@ -461,13 +734,14 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   header: { padding: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { fontSize: 28, fontWeight: '900', color: '#16352c' },
-  subtitle: { color: '#6a7d76', marginTop: 4 },
+  subtitle: { color: '#6a7d76', marginTop: 4, maxWidth: 220 },
   refresh: { backgroundColor: '#16352c', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16 },
-  refreshText: { color: '#2e8b57', fontWeight: '800' },
+  refreshButtonText: { color: '#fff', fontWeight: '800' },
+  linkText: { color: '#2e8b57', fontWeight: '800' },
   tabs: { paddingHorizontal: 14, paddingBottom: 8 },
   tab: { backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16, marginRight: 8 },
   tabActive: { backgroundColor: '#16352c' },
-  tabText: { color: '#4f625c', fontWeight: '700', textTransform: 'capitalize' },
+  tabText: { color: '#4f625c', fontWeight: '700' },
   tabTextActive: { color: '#fff' },
   content: { padding: 16, paddingBottom: 120 },
   card: { backgroundColor: '#fff', borderRadius: 24, padding: 16, marginBottom: 12 },
@@ -479,16 +753,19 @@ const styles = StyleSheet.create({
   thumb: { width: 68, height: 68, borderRadius: 20, backgroundColor: '#d9e3df', marginRight: 12 },
   thumbPlaceholder: { justifyContent: 'center', alignItems: 'center' },
   thumbPlaceholderText: { color: '#6a7d76', fontWeight: '800', fontSize: 10 },
-  itemContent: { flex: 1 },
+  itemContent: { flex: 1, paddingRight: 12 },
+  itemActions: { width: 122 },
   itemTitle: { fontSize: 16, fontWeight: '800', color: '#16352c' },
   itemSubtitle: { color: '#6b7f78', marginTop: 4, fontSize: 12 },
   itemMeta: { color: '#8a9893', marginTop: 4, fontSize: 11 },
   smallButton: { backgroundColor: '#eff5f2', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, marginBottom: 8, alignItems: 'center' },
   smallButtonText: { color: '#16352c', fontWeight: '700', fontSize: 12 },
+  warningButton: { backgroundColor: '#fff6e4' },
+  warningButtonText: { color: '#a76b00' },
   dangerButton: { backgroundColor: '#fff0f0', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, alignItems: 'center' },
   dangerButtonText: { color: '#cf4a4a', fontWeight: '800', fontSize: 12 },
   statusButton: { backgroundColor: '#eefcf5', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, marginBottom: 8, alignItems: 'center' },
-  statusButtonText: { color: '#2e8b57', fontWeight: '800', fontSize: 12 },
+  statusButtonText: { color: '#2e8b57', fontWeight: '800', fontSize: 12, textAlign: 'center' },
   empty: { color: '#6a7d76', textAlign: 'center', paddingVertical: 30, fontWeight: '700' },
   fab: { position: 'absolute', right: 22, bottom: 28, width: 62, height: 62, borderRadius: 31, justifyContent: 'center', alignItems: 'center', backgroundColor: '#16352c' },
   fabText: { color: '#fff', fontSize: 28, fontWeight: '700' },
