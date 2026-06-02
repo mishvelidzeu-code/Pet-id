@@ -16,24 +16,33 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import AdminShopManager from '../components/AdminShopManager';
+import AdminPushManager from '../components/AdminPushManager';
 import { supabase } from '../lib/supabase';
 import { isAdminUser } from '../lib/adminConfig';
 import { uploadImageAsset } from '../lib/storage';
 import {
   buildEventDate,
+  fetchAdminAdoptionPosts,
   fetchAdminCharityPosts,
   fetchAdminClinics,
   fetchAdminEvents,
 } from '../lib/contentService';
+import {
+  ensurePetCodeIsUnique,
+} from '../lib/petCode';
 
-const tabs = ['dashboard', 'pets', 'clinics', 'events', 'charity'];
+const tabs = ['dashboard', 'pets', 'adoption', 'clinics', 'events', 'charity', 'shop', 'notifications'];
 
 const tabLabels = {
   dashboard: 'მიმოხილვა',
   pets: 'ცხოველები',
+  adoption: 'აყვანა',
   clinics: 'კლინიკები',
   events: 'ივენთები',
   charity: 'დახმარება',
+  shop: 'მაღაზია',
+  notifications: 'ნოთიფიკაციები',
 };
 
 const emptyPet = (ownerId = '') => ({
@@ -42,6 +51,7 @@ const emptyPet = (ownerId = '') => ({
   breed: '',
   sex: '',
   color: '',
+  size: '',
   weight: '',
   location: '',
   description: '',
@@ -89,16 +99,24 @@ const emptyCharity = () => ({
   status: 'active',
 });
 
+const emptyAdoption = () => ({
+  name: '',
+  breed: '',
+  age_label: '',
+  sex: '',
+  location: '',
+  temperament: '',
+  description: '',
+  contact_name: '',
+  contact_phone: '',
+  imageAsset: null,
+  imageUrl: '',
+  is_featured: false,
+  is_active: true,
+});
+
 function getErrorMessage(error) {
   return error?.message || 'უცნობი შეცდომა მოხდა.';
-}
-
-function normalizeShortCode(value = '') {
-  return value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-}
-
-function generateShortCode() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
 function partsFromDate(value) {
@@ -146,11 +164,12 @@ function PreviewImage({ uri, label }) {
   return <Image source={{ uri }} style={styles.thumb} />;
 }
 
-export default function AdminScreen({ session, profile }) {
+export default function AdminScreen({ session, profile, route }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [pets, setPets] = useState([]);
+  const [adoptionPosts, setAdoptionPosts] = useState([]);
   const [clinics, setClinics] = useState([]);
   const [events, setEvents] = useState([]);
   const [charityPosts, setCharityPosts] = useState([]);
@@ -162,18 +181,27 @@ export default function AdminScreen({ session, profile }) {
   const [clinicForm, setClinicForm] = useState(emptyClinic());
   const [eventForm, setEventForm] = useState(emptyEvent());
   const [charityForm, setCharityForm] = useState(emptyCharity());
+  const [adoptionForm, setAdoptionForm] = useState(emptyAdoption());
 
   const canAccess = isAdminUser(session, profile);
+
+  useEffect(() => {
+    const requestedTab = route?.params?.adminTab;
+    if (requestedTab && tabs.includes(requestedTab)) {
+      setActiveTab(requestedTab);
+    }
+  }, [route?.params?.adminTab]);
 
   const stats = useMemo(
     () => ({
       pets: pets.length,
       lost: pets.filter((item) => item.is_lost).length,
+      adoptions: adoptionPosts.filter((item) => item.is_active !== false).length,
       clinics: clinics.length,
       events: events.filter((item) => item.is_published).length,
       charity: charityPosts.filter((item) => item.status !== 'completed').length,
     }),
-    [charityPosts, clinics, events, pets]
+    [adoptionPosts, charityPosts, clinics, events, pets]
   );
 
   useEffect(() => {
@@ -199,20 +227,23 @@ export default function AdminScreen({ session, profile }) {
     }
 
     try {
-      const [petsResult, clinicsResult, eventsResult, charityResult] = await Promise.all([
+      const [petsResult, adoptionResult, clinicsResult, eventsResult, charityResult] = await Promise.all([
         supabase
           .from('pets')
           .select('*, profiles(full_name, phone_number)')
           .order('created_at', { ascending: false }),
+        fetchAdminAdoptionPosts(),
         fetchAdminClinics(),
         fetchAdminEvents(),
         fetchAdminCharityPosts(),
       ]);
       if (petsResult.error) throw petsResult.error;
+      if (adoptionResult.error) throw adoptionResult.error;
       if (clinicsResult.error) throw clinicsResult.error;
       if (eventsResult.error) throw eventsResult.error;
       if (charityResult.error) throw charityResult.error;
       setPets(petsResult.data || []);
+      setAdoptionPosts(adoptionResult.data || []);
       setClinics(clinicsResult.data || []);
       setEvents(eventsResult.data || []);
       setCharityPosts(charityResult.data || []);
@@ -229,6 +260,7 @@ export default function AdminScreen({ session, profile }) {
     setFormType(type);
     setSheetOpen(false);
     if (type === 'pet') setPetForm(emptyPet(session?.user?.id ?? ''));
+    if (type === 'adoption') setAdoptionForm(emptyAdoption());
     if (type === 'clinic') setClinicForm(emptyClinic());
     if (type === 'event') setEventForm(emptyEvent());
     if (type === 'charity') setCharityForm(emptyCharity());
@@ -250,6 +282,7 @@ export default function AdminScreen({ session, profile }) {
         breed: item.breed || '',
         sex: item.sex || '',
         color: item.color || '',
+        size: item.size || '',
         weight: item.weight || '',
         location: item.location || '',
         description: item.description || '',
@@ -273,6 +306,24 @@ export default function AdminScreen({ session, profile }) {
         lng: item.lng ? String(item.lng) : '',
         imageAsset: null,
         imageUrl: item.image_url || '',
+        is_active: item.is_active !== false,
+      });
+    }
+
+    if (type === 'adoption') {
+      setAdoptionForm({
+        name: item.name || '',
+        breed: item.breed || '',
+        age_label: item.age_label || '',
+        sex: item.sex || '',
+        location: item.location || '',
+        temperament: item.temperament || '',
+        description: item.description || '',
+        contact_name: item.contact_name || '',
+        contact_phone: item.contact_phone || '',
+        imageAsset: null,
+        imageUrl: item.image_url || '',
+        is_featured: Boolean(item.is_featured),
         is_active: item.is_active !== false,
       });
     }
@@ -314,20 +365,13 @@ export default function AdminScreen({ session, profile }) {
       if (!asset) return;
       if (type === 'pet-photo') setPetForm((current) => ({ ...current, photoAsset: asset }));
       if (type === 'pet-passport') setPetForm((current) => ({ ...current, passportAsset: asset }));
+      if (type === 'adoption') setAdoptionForm((current) => ({ ...current, imageAsset: asset }));
       if (type === 'clinic') setClinicForm((current) => ({ ...current, imageAsset: asset }));
       if (type === 'event') setEventForm((current) => ({ ...current, imageAsset: asset }));
       if (type === 'charity') setCharityForm((current) => ({ ...current, imageAsset: asset }));
     } catch (error) {
       Alert.alert('სურათი', getErrorMessage(error));
     }
-  }
-
-  async function ensurePetCodeIsUnique(shortCode, currentId = null) {
-    let query = supabase.from('pets').select('id').eq('short_code', shortCode).limit(1);
-    if (currentId) query = query.neq('id', currentId);
-    const { data, error } = await query;
-    if (error) throw error;
-    if (data?.length) throw new Error('ეს Pet ID უკვე გამოყენებულია სხვა ცხოველისთვის.');
   }
 
   async function savePet() {
@@ -339,9 +383,10 @@ export default function AdminScreen({ session, profile }) {
 
       if (!ownerId) throw new Error('ადმინის სესია ვერ მოიძებნა.');
 
-      const shortCode = normalizeShortCode(petForm.short_code) || editing?.originalShortCode || generateShortCode();
-      if (!/^[A-Z0-9]{6}$/.test(shortCode)) throw new Error('Pet ID უნდა იყოს 6 სიმბოლო.');
-      await ensurePetCodeIsUnique(shortCode, editing?.type === 'pet' ? editing.id : null);
+      const shortCode = await ensurePetCodeIsUnique(
+        petForm.short_code,
+        editing?.type === 'pet' ? editing.id : null
+      );
 
       const photoUrl = petForm.photoAsset ? await uploadImageAsset(petForm.photoAsset, { folder: 'pets/dogs', prefix: 'admin_pet' }) : petForm.photoUrl || null;
       const passportUrl = petForm.passportAsset ? await uploadImageAsset(petForm.passportAsset, { folder: 'pets/passports', prefix: 'admin_passport' }) : petForm.passportUrl || null;
@@ -357,6 +402,7 @@ export default function AdminScreen({ session, profile }) {
         is_lost: petForm.is_lost,
         short_code: shortCode,
         color: petForm.color.trim(),
+        size: petForm.size.trim(),
         weight: petForm.weight.trim(),
         description: petForm.description.trim(),
         location: petForm.location.trim(),
@@ -378,6 +424,50 @@ export default function AdminScreen({ session, profile }) {
       );
     } catch (error) {
       Alert.alert('ცხოველის შენახვა ვერ მოხერხდა', getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveAdoption() {
+    if (!adoptionForm.name.trim() || !adoptionForm.contact_phone.trim() || !adoptionForm.location.trim()) {
+      return Alert.alert('აყვანის ბარათი', 'სახელი, მდებარეობა და საკონტაქტო ნომერი სავალდებულოა.');
+    }
+
+    setSaving(true);
+
+    try {
+      const imageUrl = adoptionForm.imageAsset
+        ? await uploadImageAsset(adoptionForm.imageAsset, { folder: 'admin/adoption', prefix: 'adoption' })
+        : adoptionForm.imageUrl || null;
+
+      const payload = {
+        name: adoptionForm.name.trim(),
+        breed: adoptionForm.breed.trim(),
+        age_label: adoptionForm.age_label.trim(),
+        sex: adoptionForm.sex.trim(),
+        location: adoptionForm.location.trim(),
+        temperament: adoptionForm.temperament.trim(),
+        description: adoptionForm.description.trim(),
+        contact_name: adoptionForm.contact_name.trim(),
+        contact_phone: adoptionForm.contact_phone.trim(),
+        image_url: imageUrl,
+        is_featured: adoptionForm.is_featured,
+        is_active: adoptionForm.is_active,
+      };
+
+      const result = editing?.type === 'adoption'
+        ? await supabase.from('adoption_posts').update(payload).eq('id', editing.id)
+        : await supabase.from('adoption_posts').insert([payload]);
+
+      if (result.error) throw result.error;
+
+      await loadAll(true);
+      setActiveTab('adoption');
+      setAdoptionForm(emptyAdoption());
+      closeForm();
+    } catch (error) {
+      Alert.alert('აყვანის ბარათის შენახვა ვერ მოხერხდა', getErrorMessage(error));
     } finally {
       setSaving(false);
     }
@@ -506,6 +596,7 @@ export default function AdminScreen({ session, profile }) {
           <Text style={styles.cardTitle}>სწრაფი სტატისტიკა</Text>
           <Text style={styles.stat}>ცხოველები: {stats.pets}</Text>
           <Text style={styles.stat}>დაკარგული: {stats.lost}</Text>
+          <Text style={styles.stat}>აყვანის ბარათები: {stats.adoptions}</Text>
           <Text style={styles.stat}>კლინიკები: {stats.clinics}</Text>
           <Text style={styles.stat}>ივენთები: {stats.events}</Text>
           <Text style={styles.stat}>აქტიური დახმარება: {stats.charity}</Text>
@@ -516,6 +607,9 @@ export default function AdminScreen({ session, profile }) {
           <TouchableOpacity style={styles.action} onPress={() => openCreate('pet')}>
             <Text style={styles.actionText}>ცხოველის დამატება</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.action} onPress={() => openCreate('adoption')}>
+            <Text style={styles.actionText}>აყვანის ბარათის დამატება</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.action} onPress={() => openCreate('clinic')}>
             <Text style={styles.actionText}>კლინიკის დამატება</Text>
           </TouchableOpacity>
@@ -524,6 +618,12 @@ export default function AdminScreen({ session, profile }) {
           </TouchableOpacity>
           <TouchableOpacity style={styles.action} onPress={() => openCreate('charity')}>
             <Text style={styles.actionText}>დახმარების პოსტის დამატება</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.action} onPress={() => setActiveTab('shop')}>
+            <Text style={styles.actionText}>მაღაზიის მართვა</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.action} onPress={() => setActiveTab('notifications')}>
+            <Text style={styles.actionText}>ნოტიფიკაციების გაგზავნა</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -571,6 +671,37 @@ export default function AdminScreen({ session, profile }) {
           </View>
         </View>
       ), 'ცხოველები ჯერ არ არის.');
+    }
+
+    if (activeTab === 'adoption') {
+      return renderList(adoptionPosts, (item) => (
+        <View key={item.id} style={styles.item}>
+          <PreviewImage uri={item.image_url} label="ფოტო" />
+          <View style={styles.itemContent}>
+            <Text style={styles.itemTitle}>{item.name}</Text>
+            <Text style={styles.itemSubtitle}>
+              {[item.breed, item.location].filter(Boolean).join(' • ') || 'აღწერა დასამატებელია'}
+            </Text>
+            <Text style={styles.itemMeta}>
+              {[item.contact_name, item.contact_phone].filter(Boolean).join(' • ')}
+            </Text>
+            <Text style={styles.itemMeta}>
+              {item.is_active === false ? 'გამორთულია' : item.is_featured ? 'გამორჩეული' : 'აქტიური'}
+            </Text>
+          </View>
+          <View style={styles.itemActions}>
+            <TouchableOpacity style={styles.smallButton} onPress={() => openEdit('adoption', item)}>
+              <Text style={styles.smallButtonText}>რედაქტირება</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.dangerButton}
+              onPress={() => confirmDelete('adoption_posts', item.id, 'აყვანის ბარათი წაიშალოს?')}
+            >
+              <Text style={styles.dangerButtonText}>წაშლა</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ), 'აყვანის ბარათები ჯერ არ არის.');
     }
 
     if (activeTab === 'clinics') {
@@ -621,6 +752,14 @@ export default function AdminScreen({ session, profile }) {
       ), 'ივენთები ჯერ არ არის.');
     }
 
+    if (activeTab === 'shop') {
+      return <AdminShopManager visible={activeTab === 'shop'} />;
+    }
+
+    if (activeTab === 'notifications') {
+      return <AdminPushManager visible={activeTab === 'notifications'} />;
+    }
+
     return renderList(charityPosts, (item) => (
       <View key={item.id} style={styles.item}>
         <PreviewImage uri={item.image_url} label="ფოტო" />
@@ -665,17 +804,40 @@ export default function AdminScreen({ session, profile }) {
       <TextInput style={styles.input} placeholder="ჯიში" value={petForm.breed} onChangeText={(value) => setPetForm((current) => ({ ...current, breed: value }))} placeholderTextColor="#98a3a0" />
       <TextInput style={styles.input} placeholder="სქესი" value={petForm.sex} onChangeText={(value) => setPetForm((current) => ({ ...current, sex: value }))} placeholderTextColor="#98a3a0" />
       <TextInput style={styles.input} placeholder="ფერი" value={petForm.color} onChangeText={(value) => setPetForm((current) => ({ ...current, color: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="ზომა: პატარა, საშუალო ან დიდი" value={petForm.size} onChangeText={(value) => setPetForm((current) => ({ ...current, size: value }))} placeholderTextColor="#98a3a0" />
       <TextInput style={styles.input} placeholder="წონა" value={petForm.weight} onChangeText={(value) => setPetForm((current) => ({ ...current, weight: value }))} placeholderTextColor="#98a3a0" />
       <TextInput style={styles.input} placeholder="მდებარეობა" value={petForm.location} onChangeText={(value) => setPetForm((current) => ({ ...current, location: value }))} placeholderTextColor="#98a3a0" />
       <TextInput style={styles.input} placeholder="დაბადების თარიღი (YYYY-MM-DD)" value={petForm.birth_date} onChangeText={(value) => setPetForm((current) => ({ ...current, birth_date: value }))} placeholderTextColor="#98a3a0" />
       <TextInput style={styles.input} placeholder="მიკროჩიპის ნომერი" value={petForm.microchip_id} onChangeText={(value) => setPetForm((current) => ({ ...current, microchip_id: value }))} placeholderTextColor="#98a3a0" />
-      <TextInput style={styles.input} placeholder="Pet ID (AB12CD)" maxLength={6} autoCapitalize="characters" value={petForm.short_code} onChangeText={(value) => setPetForm((current) => ({ ...current, short_code: normalizeShortCode(value) }))} placeholderTextColor="#98a3a0" />
-      <Text style={styles.helperText}>თუ გინდა, რომ Pet ID ავტომატურად დაგენერირდეს, ეს ველი ცარიელი დატოვე.</Text>
+      <TextInput style={styles.input} placeholder="Pet ID (მინიმუმ 3 სიმბოლო)" value={petForm.short_code} onChangeText={(value) => setPetForm((current) => ({ ...current, short_code: value }))} placeholderTextColor="#98a3a0" />
+      <Text style={styles.helperText}>Pet ID სავალდებულოა და უნდა შეიცავდეს მინიმუმ 3 სიმბოლოს.</Text>
       <TextInput style={[styles.input, styles.textArea]} placeholder="აღწერა" value={petForm.description} onChangeText={(value) => setPetForm((current) => ({ ...current, description: value }))} multiline placeholderTextColor="#98a3a0" />
       <View style={styles.switchRow}><Text style={styles.switchText}>დაკარგულად მონიშვნა</Text><Switch value={petForm.is_lost} onValueChange={(value) => setPetForm((current) => ({ ...current, is_lost: value }))} /></View>
       <TouchableOpacity style={styles.saveButton} onPress={savePet} disabled={saving}><Text style={styles.saveButtonText}>{saving ? 'ინახება...' : 'შენახვა'}</Text></TouchableOpacity>
     </ScrollView>;
   }
+
+  function renderAdoptionForm() {
+    return <ScrollView contentContainerStyle={styles.formContent}>
+      <Text style={styles.formTitle}>{editing?.type === 'adoption' ? 'აყვანის ბარათის რედაქტირება' : 'აყვანის ბარათის დამატება'}</Text>
+      <Text style={styles.helperText}>ეს ბარათი გამოჩნდება ძებნის გვერდის adoption სექციაში.</Text>
+      <Text style={styles.inputLabel}>ფოტო</Text>
+      {renderImagePicker(adoptionForm.imageAsset?.uri || adoptionForm.imageUrl, () => attachImage('adoption'))}
+      <TextInput style={styles.input} placeholder="სახელი" value={adoptionForm.name} onChangeText={(value) => setAdoptionForm((current) => ({ ...current, name: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="ჯიში" value={adoptionForm.breed} onChangeText={(value) => setAdoptionForm((current) => ({ ...current, breed: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="ასაკი (მაგ: 8 თვე)" value={adoptionForm.age_label} onChangeText={(value) => setAdoptionForm((current) => ({ ...current, age_label: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="სქესი" value={adoptionForm.sex} onChangeText={(value) => setAdoptionForm((current) => ({ ...current, sex: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="მდებარეობა" value={adoptionForm.location} onChangeText={(value) => setAdoptionForm((current) => ({ ...current, location: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="ხასიათი / ტემპერამენტი" value={adoptionForm.temperament} onChangeText={(value) => setAdoptionForm((current) => ({ ...current, temperament: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="საკონტაქტო პირი" value={adoptionForm.contact_name} onChangeText={(value) => setAdoptionForm((current) => ({ ...current, contact_name: value }))} placeholderTextColor="#98a3a0" />
+      <TextInput style={styles.input} placeholder="ტელეფონი" value={adoptionForm.contact_phone} onChangeText={(value) => setAdoptionForm((current) => ({ ...current, contact_phone: value }))} placeholderTextColor="#98a3a0" keyboardType="phone-pad" />
+      <TextInput style={[styles.input, styles.textArea]} placeholder="აღწერა" value={adoptionForm.description} onChangeText={(value) => setAdoptionForm((current) => ({ ...current, description: value }))} multiline placeholderTextColor="#98a3a0" />
+      <View style={styles.switchRow}><Text style={styles.switchText}>გამორჩეულად გამოჩნდეს</Text><Switch value={adoptionForm.is_featured} onValueChange={(value) => setAdoptionForm((current) => ({ ...current, is_featured: value }))} /></View>
+      <View style={styles.switchRow}><Text style={styles.switchText}>აქტიური ბარათი</Text><Switch value={adoptionForm.is_active} onValueChange={(value) => setAdoptionForm((current) => ({ ...current, is_active: value }))} /></View>
+      <TouchableOpacity style={styles.saveButton} onPress={saveAdoption} disabled={saving}><Text style={styles.saveButtonText}>{saving ? 'ინახება...' : 'შენახვა'}</Text></TouchableOpacity>
+    </ScrollView>;
+  }
+
   function renderClinicForm() {
     return <ScrollView contentContainerStyle={styles.formContent}>
       <Text style={styles.formTitle}>{editing?.type === 'clinic' ? 'კლინიკის რედაქტირება' : 'კლინიკის დამატება'}</Text>
@@ -720,13 +882,118 @@ export default function AdminScreen({ session, profile }) {
     </ScrollView>;
   }
 
-  if (!canAccess) return <SafeAreaView style={styles.safe}><View style={styles.center}><Text style={styles.title}>ადმინის წვდომა არ გაქვს</Text><Text style={styles.subtitle}>ეს გვერდი მხოლოდ ადმინისტრატორისთვისაა.</Text></View></SafeAreaView>;
-  if (loading) return <SafeAreaView style={styles.safe}><View style={styles.center}><ActivityIndicator size="large" color="#2e8b57" /></View></SafeAreaView>;
+  if (!canAccess) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <Text style={styles.title}>ადმინის წვდომა არ გაქვს</Text>
+          <Text style={styles.subtitle}>ეს გვერდი მხოლოდ ადმინისტრატორისთვისაა.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-  return <SafeAreaView style={styles.safe} edges={['top']}><View style={styles.header}><View><Text style={styles.title}>ადმინ პანელი</Text><Text style={styles.subtitle}>მართე აპი ტელეფონიდან</Text></View><TouchableOpacity style={styles.refresh} onPress={() => loadAll(true)}><Text style={styles.refreshButtonText}>{refreshing ? '...' : 'განახლება'}</Text></TouchableOpacity></View><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>{tabs.map((item) => <TouchableOpacity key={item} style={[styles.tab, activeTab === item && styles.tabActive]} onPress={() => setActiveTab(item)}><Text style={[styles.tabText, activeTab === item && styles.tabTextActive]}>{tabLabels[item]}</Text></TouchableOpacity>)}</ScrollView><ScrollView contentContainerStyle={styles.content}>{renderTabContent()}</ScrollView><TouchableOpacity style={styles.fab} onPress={() => activeTab === 'pets' ? openCreate('pet') : setSheetOpen(true)}><Text style={styles.fabText}>+</Text></TouchableOpacity>
-    <Modal visible={sheetOpen} transparent animationType="fade"><View style={styles.overlay}><TouchableOpacity style={styles.backdrop} onPress={() => setSheetOpen(false)} /><View style={styles.sheet}><Text style={styles.cardTitle}>დამატება</Text><TouchableOpacity style={styles.action} onPress={() => openCreate('pet')}><Text style={styles.actionText}>ცხოველი</Text></TouchableOpacity><TouchableOpacity style={styles.action} onPress={() => openCreate('clinic')}><Text style={styles.actionText}>კლინიკა</Text></TouchableOpacity><TouchableOpacity style={styles.action} onPress={() => openCreate('event')}><Text style={styles.actionText}>ივენთი</Text></TouchableOpacity><TouchableOpacity style={styles.action} onPress={() => openCreate('charity')}><Text style={styles.actionText}>დახმარების პოსტი</Text></TouchableOpacity><TouchableOpacity onPress={() => setSheetOpen(false)}><Text style={styles.cancel}>გაუქმება</Text></TouchableOpacity></View></View></Modal>
-    <Modal visible={Boolean(formType)} animationType="slide"><KeyboardAvoidingView style={styles.modal} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><View style={styles.modalHeader}><Text style={styles.cardTitle}>შევსება</Text><TouchableOpacity onPress={closeForm}><Text style={styles.linkText}>დახურვა</Text></TouchableOpacity></View>{formType === 'pet' && renderPetForm()}{formType === 'clinic' && renderClinicForm()}{formType === 'event' && renderEventForm()}{formType === 'charity' && renderCharityForm()}</KeyboardAvoidingView></Modal>
-  </SafeAreaView>;
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#2e8b57" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>ადმინ პანელი</Text>
+          <Text style={styles.subtitle}>მართე აპი ტელეფონიდან</Text>
+        </View>
+        <TouchableOpacity style={styles.refresh} onPress={() => loadAll(true)}>
+          <Text style={styles.refreshButtonText}>{refreshing ? '...' : 'განახლება'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0, flexShrink: 0 }}
+        contentContainerStyle={styles.tabs}
+      >
+        {tabs.map((item) => (
+          <TouchableOpacity
+            key={item}
+            style={[styles.tab, activeTab === item && styles.tabActive]}
+            onPress={() => setActiveTab(item)}
+          >
+            <Text style={[styles.tabText, activeTab === item && styles.tabTextActive]}>
+              {tabLabels[item]}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
+        {renderTabContent()}
+      </ScrollView>
+
+      {!['shop', 'notifications'].includes(activeTab) && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => (activeTab === 'pets' ? openCreate('pet') : setSheetOpen(true))}
+        >
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      )}
+
+      <Modal visible={sheetOpen} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <TouchableOpacity style={styles.backdrop} onPress={() => setSheetOpen(false)} />
+          <View style={styles.sheet}>
+            <Text style={styles.cardTitle}>დამატება</Text>
+            <TouchableOpacity style={styles.action} onPress={() => openCreate('pet')}>
+              <Text style={styles.actionText}>ცხოველი</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.action} onPress={() => openCreate('adoption')}>
+              <Text style={styles.actionText}>აყვანის ბარათი</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.action} onPress={() => openCreate('clinic')}>
+              <Text style={styles.actionText}>კლინიკა</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.action} onPress={() => openCreate('event')}>
+              <Text style={styles.actionText}>ივენთი</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.action} onPress={() => openCreate('charity')}>
+              <Text style={styles.actionText}>დახმარების პოსტი</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setSheetOpen(false)}>
+              <Text style={styles.cancel}>გაუქმება</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(formType)} animationType="slide">
+        <KeyboardAvoidingView
+          style={styles.modal}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalHeader}>
+            <Text style={styles.cardTitle}>შევსება</Text>
+            <TouchableOpacity onPress={closeForm}>
+              <Text style={styles.linkText}>დახურვა</Text>
+            </TouchableOpacity>
+          </View>
+          {formType === 'pet' && renderPetForm()}
+          {formType === 'adoption' && renderAdoptionForm()}
+          {formType === 'clinic' && renderClinicForm()}
+          {formType === 'event' && renderEventForm()}
+          {formType === 'charity' && renderCharityForm()}
+        </KeyboardAvoidingView>
+      </Modal>
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({

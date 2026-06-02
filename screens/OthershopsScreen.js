@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { fetchPublicClinics } from '../lib/contentService';
+import { supabase } from '../lib/supabase';
 
 function getDistance(lat1, lon1, lat2, lon2) {
   const radius = 6371;
@@ -46,48 +46,53 @@ function ScreenHeader({ onBack }) {
         </TouchableOpacity>
       ) : null}
       <View style={styles.headerCopy}>
-        <Text style={styles.headerTitle}>კლინიკები</Text>
+        <Text style={styles.headerTitle}>ზოომაღაზიები</Text>
         <Text style={styles.headerSubtitle}>
-          მოძებნე უახლოესი ვეტ-კლინიკა, დაურეკე ან პირდაპირ გაუშვი მარშრუტი.
+          მოძებნე უახლოესი ზოომაღაზია, დაურეკე ან პირდაპირ გაუშვი მარშრუტი.
         </Text>
       </View>
     </View>
   );
 }
 
-export default function ClinicsScreen({ onBack = null }) {
-  const [clinics, setClinics] = useState([]);
+export default function OthershopsScreen({ onBack = null }) {
+  const [shops, setShops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const visibleClinics = useMemo(() => {
+  const visibleShops = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
     if (!normalizedQuery) {
-      return clinics;
+      return shops;
     }
 
-    return clinics.filter((clinic) => {
-      const clinicName = String(clinic.name || '').toLowerCase();
-      const clinicAddress = String(clinic.address || '').toLowerCase();
-      return clinicName.includes(normalizedQuery) || clinicAddress.includes(normalizedQuery);
+    return shops.filter((shop) => {
+      const shopName = String(shop.name || '').toLowerCase();
+      const shopAddress = String(shop.address || '').toLowerCase();
+      return shopName.includes(normalizedQuery) || shopAddress.includes(normalizedQuery);
     });
-  }, [clinics, searchQuery]);
+  }, [shops, searchQuery]);
 
   useEffect(() => {
-    loadClinics();
+    loadShops();
   }, []);
 
-  async function loadClinics(withRefresh = false) {
+  async function loadShops(withRefresh = false) {
     if (withRefresh) {
       setRefreshing(true);
     } else {
       setLoading(true);
     }
 
-    const { data } = await fetchPublicClinics();
-    let nextClinics = data || [];
+    // მოგვაქვს მაღაზიები Supabase-დან
+    const { data, error } = await supabase
+      .from('shops')
+      .select('*')
+      .eq('is_active', true);
+
+    let nextShops = data || [];
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -95,24 +100,24 @@ export default function ClinicsScreen({ onBack = null }) {
         const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
-        nextClinics = nextClinics
-          .map((clinic) => {
+        nextShops = nextShops
+          .map((shop) => {
             if (
-              clinic.lat == null ||
-              clinic.lng == null ||
-              Number.isNaN(clinic.lat) ||
-              Number.isNaN(clinic.lng)
+              shop.lat == null ||
+              shop.lng == null ||
+              Number.isNaN(shop.lat) ||
+              Number.isNaN(shop.lng)
             ) {
-              return clinic;
+              return shop;
             }
 
             return {
-              ...clinic,
+              ...shop,
               distance: getDistance(
                 location.coords.latitude,
                 location.coords.longitude,
-                clinic.lat,
-                clinic.lng
+                shop.lat,
+                shop.lng
               ),
             };
           })
@@ -122,11 +127,11 @@ export default function ClinicsScreen({ onBack = null }) {
             return a.distance - b.distance;
           });
       }
-    } catch (error) {
-      console.log('Clinic location error:', error);
+    } catch (err) {
+      console.log('Shop location error:', err);
     }
 
-    setClinics(nextClinics);
+    setShops(nextShops);
     setLoading(false);
     setRefreshing(false);
   }
@@ -152,7 +157,7 @@ export default function ClinicsScreen({ onBack = null }) {
         <Ionicons name="search-outline" size={18} color="#6a7f76" />
         <TextInput
           style={styles.searchInput}
-          placeholder="მოძებნე კლინიკა"
+          placeholder="მოძებნე მაღაზია"
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholderTextColor="#8ca097"
@@ -168,53 +173,59 @@ export default function ClinicsScreen({ onBack = null }) {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => loadClinics(true)} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => loadShops(true)} />
           }
         >
-          {visibleClinics.length === 0 ? (
+          {visibleShops.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyText}>
                 {searchQuery.trim()
-                  ? 'ასეთი კლინიკა ვერ მოიძებნა.'
-                  : 'აქტიური კლინიკები ჯერ არ არის დამატებული.'}
+                  ? 'ასეთი მაღაზია ვერ მოიძებნა.'
+                  : 'აქტიური ზოომაღაზიები ჯერ არ არის დამატებული.'}
               </Text>
             </View>
           ) : (
-            visibleClinics.map((clinic, index) => (
-              <View key={clinic.id} style={styles.card}>
+            visibleShops.map((shop, index) => (
+              <View key={shop.id} style={styles.card}>
                 <View style={styles.imageWrap}>
-                  <Image source={{ uri: clinic.image_url }} style={styles.image} />
-                  {index === 0 && clinic.distance != null ? (
+                  {shop.image_url ? (
+                    <Image source={{ uri: shop.image_url }} style={styles.image} />
+                  ) : (
+                    <View style={[styles.image, { backgroundColor: '#dde6e2', justifyContent: 'center', alignItems: 'center' }]}>
+                       <Ionicons name="cart-outline" size={40} color="#90a49c" />
+                    </View>
+                  )}
+                  {index === 0 && shop.distance != null ? (
                     <View style={styles.closestBadge}>
                       <Text style={styles.closestBadgeText}>ყველაზე ახლო</Text>
                     </View>
                   ) : null}
-                  {clinic.distance != null ? (
+                  {shop.distance != null ? (
                     <View style={styles.distanceBadge}>
-                      <Text style={styles.distanceText}>{formatDistance(clinic.distance)}</Text>
+                      <Text style={styles.distanceText}>{formatDistance(shop.distance)}</Text>
                     </View>
                   ) : null}
                 </View>
 
                 <View style={styles.cardBody}>
-                  <Text style={styles.name}>{clinic.name}</Text>
+                  <Text style={styles.name}>{shop.name}</Text>
                   <View style={styles.addressRow}>
                     <Ionicons name="location-outline" size={16} color="#0066cc" />
-                    <Text style={styles.address}>{clinic.address}</Text>
+                    <Text style={styles.address}>{shop.address}</Text>
                   </View>
                   <View style={styles.actions}>
                     <TouchableOpacity
                       style={styles.callButton}
-                      onPress={() => makeCall(clinic.phone)}
+                      onPress={() => makeCall(shop.phone)}
                       activeOpacity={0.8}
                     >
                       <Ionicons name="call-outline" size={16} color="#2e8b57" />
                       <Text style={styles.callText}>დარეკვა</Text>
                     </TouchableOpacity>
-                    {clinic.lat != null && clinic.lng != null ? (
+                    {shop.lat != null && shop.lng != null ? (
                       <TouchableOpacity
                         style={styles.mapButton}
-                        onPress={() => openMaps(clinic.lat, clinic.lng)}
+                        onPress={() => openMaps(shop.lat, shop.lng)}
                         activeOpacity={0.8}
                       >
                         <Ionicons name="navigate-outline" size={16} color="#0066cc" />

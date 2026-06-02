@@ -1,21 +1,39 @@
 {
   "expo": {
-    "name": "PetIDApp",
+    "name": "Georgian Pets",
     "slug": "PetIDApp",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "updates": {
+      "url": "https://u.expo.dev/33bbcaea-a2b0-4237-95f6-e1eae6b591c6",
+      "enabled": true,
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "fallbackToCacheTimeout": 0
+    },
+    "plugins": [
+      "expo-updates",
+      "expo-notifications",
+      "expo-font"
+    ],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.petidapp",
-      "buildNumber": "1"
+      "supportsTablet": false,
+      "requireFullScreen": true,
+      "bundleIdentifier": "com.mishvela1.petidapp",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +41,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.yourcompany.petidapp",
+      "package": "com.mishvela1.petidapp",
       "versionCode": 1
     },
     "web": {
@@ -31,8 +49,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "აქ-ჩასვით-თქვენი-EXPO-პროექტის-ID"
+        "projectId": "33bbcaea-a2b0-4237-95f6-e1eae6b591c6"
       }
-    }
+    },
+    "owner": "mishvela1"
   }
 }
