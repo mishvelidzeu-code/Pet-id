@@ -362,6 +362,9 @@ function setAuthenticated(isAuthenticated) {
   document.querySelectorAll('.admin-only').forEach((item) => {
     item.classList.toggle('is-hidden', !state.isAdmin);
   });
+  document.querySelectorAll('.partner-only').forEach((item) => {
+    item.classList.toggle('is-hidden', state.isAdmin);
+  });
 }
 
 async function loadSession() {

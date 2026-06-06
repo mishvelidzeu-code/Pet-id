@@ -21,13 +21,13 @@
         </div>
 
         <nav class="nav">
-          <button class="nav-item is-active" data-view="dashboard">დეშბორდი</button>
-          <button class="nav-item" data-view="profile">პროფილი</button>
-          <button class="nav-item" data-view="products">პროდუქტები</button>
-          <button class="nav-item" data-view="services">სერვისები</button>
-          <button class="nav-item" data-view="orders">შეკვეთები <span id="nav-orders-badge" class="nav-badge is-hidden">0</span></button>
-          <button class="nav-item" data-view="requests">მოთხოვნები <span id="nav-requests-badge" class="nav-badge is-hidden">0</span></button>
-          <button class="nav-item" data-view="assistant">ასისტენტი</button>
+          <button class="nav-item partner-only is-active" data-view="dashboard">დეშბორდი</button>
+          <button class="nav-item partner-only" data-view="profile">პროფილი</button>
+          <button class="nav-item partner-only" data-view="products">პროდუქტები</button>
+          <button class="nav-item partner-only" data-view="services">სერვისები</button>
+          <button class="nav-item partner-only" data-view="orders">შეკვეთები <span id="nav-orders-badge" class="nav-badge is-hidden">0</span></button>
+          <button class="nav-item partner-only" data-view="requests">მოთხოვნები <span id="nav-requests-badge" class="nav-badge is-hidden">0</span></button>
+          <button class="nav-item partner-only" data-view="assistant">ასისტენტი</button>
           <button class="nav-item admin-only is-hidden" data-view="approvals">დადასტურება <span id="nav-approvals-badge" class="nav-badge is-hidden">0</span></button>
           <button class="nav-item admin-only is-hidden" data-view="admin-stats">სტატისტიკა</button>
           <button class="nav-item admin-only is-hidden" data-view="admin-partners">პარტნიორები</button>
@@ -72,7 +72,7 @@
               <p class="eyebrow">მართვის სივრცე</p>
               <h1 id="page-title">დეშბორდი</h1>
             </div>
-            <div class="business-picker">
+            <div class="business-picker partner-only">
               <select id="business-select"></select>
               <button id="new-business" class="secondary-button" type="button">+ ბიზნესი</button>
             </div>
