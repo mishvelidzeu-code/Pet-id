@@ -12,11 +12,12 @@ const state = {
   services: [],
   orders: [],
   requests: [],
+  assistantMessages: [],
 };
 
 const $ = (id) => document.getElementById(id);
 
-const views = ['dashboard', 'profile', 'products', 'services', 'orders', 'requests', 'approvals'];
+const views = ['dashboard', 'profile', 'products', 'services', 'orders', 'requests', 'assistant', 'approvals'];
 const pageTitles = {
   dashboard: 'დეშბორდი',
   profile: 'ბიზნეს პროფილი',
@@ -24,7 +25,19 @@ const pageTitles = {
   services: 'სერვისები',
   orders: 'შეკვეთები',
   requests: 'მოთხოვნები',
+  assistant: 'ასისტენტი',
   approvals: 'დადასტურება',
+};
+
+const productCategoryLabels = {
+  food: 'საკვები',
+  medicine: 'წამლები',
+  treats: 'სასუსნავი',
+  toys: 'სათამაშო',
+  care: 'ჰიგიენა / მოვლა',
+  accessories: 'აქსესუარი',
+  beds: 'საწოლი / სახლი',
+  bowls: 'ჯამები',
 };
 
 function activeBusiness() {
@@ -81,6 +94,195 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function normalizeImageUrls(value) {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).map((item) => String(item).trim()).filter(Boolean).slice(0, 3);
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+  }
+
+  return [];
+}
+
+function productImageUrls(product) {
+  const urls = normalizeImageUrls(product?.image_urls);
+  if (urls.length) return urls;
+  return product?.image_url ? [product.image_url] : [];
+}
+
+function businessKindLabel(kind) {
+  const labels = {
+    shop: 'ზოო შოპი',
+    clinic: 'კლინიკა',
+    hotel: 'სასტუმრო',
+    taxi: 'Pet Taxi',
+    grooming: 'გრუმინგი & ბარბერი',
+  };
+  return labels[kind] || kind || 'ბიზნესი';
+}
+
+function assistantSnapshot() {
+  const business = activeBusiness();
+  const missingProfile = [];
+  if (!business?.name) missingProfile.push('სახელი');
+  if (!business?.phone) missingProfile.push('ტელეფონი');
+  if (!business?.address) missingProfile.push('მისამართი');
+  if (!business?.lat || !business?.lng) missingProfile.push('Google Maps ლოკაცია');
+  if (!business?.image_url) missingProfile.push('სურათი');
+  if (!business?.working_hours) missingProfile.push('სამუშაო საათები');
+
+  const categories = [...new Set(state.products.map((item) => item.category).filter(Boolean))];
+  const lowStock = state.products.filter((item) => Number(item.stock_quantity) <= 3);
+  const missingImages = state.products.filter((item) => !productImageUrls(item).length);
+  const pendingOrders = state.orders.filter((item) => item.status === 'new');
+  const pendingRequests = state.requests.filter((item) => item.status === 'new');
+
+  return { business, missingProfile, categories, lowStock, missingImages, pendingOrders, pendingRequests };
+}
+
+function generateAssistantReply(prompt = '') {
+  const { business, missingProfile, categories, lowStock, missingImages, pendingOrders, pendingRequests } = assistantSnapshot();
+
+  if (!business) {
+    return [
+      'ჯერ შექმენი ბიზნეს პროფილი.',
+      'მინიმუმ შეავსე: ტიპი, სახელი, ტელეფონი, Google Maps ლოკაცია, სამუშაო საათები და სურათი.',
+    ].join('\n');
+  }
+
+  const normalized = prompt.toLowerCase();
+  const lines = [
+    `${businessKindLabel(business.kind)}: ${business.name}`,
+    business.is_approved ? 'სტატუსი: დადასტურებულია და აპში გამოჩნდება, თუ აქტიურია.' : 'სტატუსი: ელოდება ადმინის დადასტურებას.',
+  ];
+
+  if (missingProfile.length) {
+    lines.push(`პროფილში დასამატებელია: ${missingProfile.join(', ')}.`);
+  } else {
+    lines.push('პროფილი კარგად არის შევსებული.');
+  }
+
+  if (business.kind === 'shop') {
+    lines.push(`პროდუქტები: ${state.products.length}. კატეგორიები: ${categories.length ? categories.map((item) => productCategoryLabels[item] || item).join(', ') : 'ჯერ არ არის'}.`);
+    if (missingImages.length) lines.push(`${missingImages.length} პროდუქტს სურათი აკლია. პროდუქტის ბარათზე 2-3 სურათი უკეთ ყიდის.`);
+    if (lowStock.length) lines.push(`დაბალი მარაგია ${lowStock.length} პროდუქტზე. გადაამოწმე მარაგი, რომ შეკვეთები არ გაწყდეს.`);
+    if (normalized.includes('ფას') || normalized.includes('კონკურენტ')) {
+      lines.push('ფასებზე: დაამატე ფასდაკლებული ფასი პოპულარულ პროდუქტებზე და შეადარე მინიმუმ 3 კონკურენტის ანალოგ პროდუქტს. შემდეგი AI ეტაპი ამას ავტომატურად შეგიკრებს.');
+    }
+  } else {
+    lines.push(`სერვისები: ${state.services.length}. კარგი იქნება თითო სერვისს ჰქონდეს ფასი, ხანგრძლივობა და მოკლე აღწერა.`);
+    if (!state.services.length) lines.push('დაამატე მინიმუმ 3 სერვისი, რომ მომხმარებელმა სწრაფად გაიგოს რას სთავაზობ.');
+  }
+
+  if (pendingOrders.length) lines.push(`ახალი შეკვეთები: ${pendingOrders.length}. ჯობია სწრაფად გადაიყვანო confirmed-ზე.`);
+  if (pendingRequests.length) lines.push(`ახალი მოთხოვნები: ${pendingRequests.length}. დაურეკე ან WhatsApp-ით დაუკავშირდი და სტატუსი განაახლე.`);
+
+  lines.push('შემდეგ ეტაპზე ასისტენტს დავამატებთ: კონკურენტების ფასების შედარება, პროდუქტის აღწერის გენერაცია, აქციების იდეები, მოთხოვნებზე ავტომატური პასუხის შაბლონები და გაყიდვების პროგნოზი.');
+  return lines.join('\n');
+}
+
+async function generateCompetitorComparisonReply(prompt = '') {
+  const business = activeBusiness();
+  if (!business) return generateAssistantReply(prompt);
+
+  if (business.kind === 'shop') {
+    const { data, error } = await client
+      .from('shop_products')
+      .select('title, category, price_value, discount_price, business_id')
+      .eq('is_active', true)
+      .neq('business_id', business.id);
+
+    if (error) return `${generateAssistantReply(prompt)}\n\nკონკურენტების პროდუქტების წამოღება ვერ მოხერხდა: ${error.message}`;
+
+    const ownByCategory = state.products.reduce((acc, item) => {
+      const category = item.category || 'other';
+      acc[category] = acc[category] || [];
+      acc[category].push(Number(item.discount_price ?? item.price_value ?? 0));
+      return acc;
+    }, {});
+    const competitorByCategory = (data || []).reduce((acc, item) => {
+      const category = item.category || 'other';
+      acc[category] = acc[category] || [];
+      acc[category].push(Number(item.discount_price ?? item.price_value ?? 0));
+      return acc;
+    }, {});
+
+    const lines = [`კონკურენტებთან შედარება: ${business.name}`];
+    const categories = Object.keys(ownByCategory);
+    if (!categories.length) lines.push('შედარებისთვის ჯერ დაამატე პროდუქტები და კატეგორიები.');
+
+    categories.forEach((category) => {
+      const ownPrices = ownByCategory[category].filter(Boolean);
+      const competitorPrices = (competitorByCategory[category] || []).filter(Boolean);
+      const ownAvg = ownPrices.reduce((sum, value) => sum + value, 0) / Math.max(ownPrices.length, 1);
+      const competitorAvg =
+        competitorPrices.reduce((sum, value) => sum + value, 0) / Math.max(competitorPrices.length, 1);
+      const label = productCategoryLabels[category] || category;
+
+      if (!competitorPrices.length) {
+        lines.push(`${label}: კონკურენტის საკმარისი პროდუქტი ჯერ არ ჩანს ამ კატეგორიაში.`);
+        return;
+      }
+
+      const diff = ownAvg - competitorAvg;
+      const advice =
+        Math.abs(diff) < 2
+          ? 'ფასი ბაზართან ახლოსაა.'
+          : diff > 0
+            ? 'შენ საშუალოდ ძვირი ხარ; დაამატე ფასდაკლება ან უკეთესი აღწერა/სურათები.'
+            : 'შენ საშუალოდ იაფი ხარ; შეგიძლია პოპულარულ პროდუქტებზე ფასი ოდნავ აწიო ან bundle გააკეთო.';
+      lines.push(`${label}: შენი საშუალო ${ownAvg.toFixed(2)} ₾, კონკურენტები ${competitorAvg.toFixed(2)} ₾. ${advice}`);
+    });
+
+    lines.push('შედარება ახლა ეფუძნება ბაზაში არსებულ პარტნიორ პროდუქტებს. შემდეგ AI ვერსიაში დავამატებთ გარე ბაზრის/ონლაინ კონკურენტების ფასებსაც.');
+    return lines.join('\n');
+  }
+
+  const { data, error } = await client
+    .from('business_services')
+    .select('title, category, price_value, business_id')
+    .eq('is_active', true)
+    .neq('business_id', business.id);
+
+  if (error) return `${generateAssistantReply(prompt)}\n\nკონკურენტების სერვისების წამოღება ვერ მოხერხდა: ${error.message}`;
+
+  const competitorServices = data || [];
+  const ownAvg =
+    state.services.reduce((sum, item) => sum + Number(item.price_value || 0), 0) /
+    Math.max(state.services.filter((item) => item.price_value !== null && item.price_value !== undefined).length, 1);
+  const competitorAvg =
+    competitorServices.reduce((sum, item) => sum + Number(item.price_value || 0), 0) /
+    Math.max(competitorServices.filter((item) => item.price_value !== null && item.price_value !== undefined).length, 1);
+
+  return [
+    `კონკურენტებთან შედარება: ${business.name} (${businessKindLabel(business.kind)})`,
+    `შენი სერვისები: ${state.services.length}. კონკურენტების ხილული სერვისები: ${competitorServices.length}.`,
+    competitorServices.length
+      ? `საშუალო ფასი: შენი ${ownAvg.toFixed(2)} ₾, კონკურენტები ${competitorAvg.toFixed(2)} ₾.`
+      : 'ამ კატეგორიაში კონკურენტის სერვისები ჯერ საკმარისად არ ჩანს.',
+    ownAvg > competitorAvg && competitorServices.length
+      ? 'თუ ფასი მაღალია, სერვისის აღწერაში აუცილებლად აჩვენე რას იღებს მომხმარებელი დამატებით.'
+      : 'კარგი იქნება სერვისებს დაუმატო პაკეტები: basic, standard, premium.',
+    'შემდეგ AI ვერსიაში დავამატებთ გარე კონკურენტების და რეალური ბაზრის ფასების მოძიებასაც.',
+  ].join('\n');
+}
+
+function isCompetitorPrompt(text) {
+  const normalized = String(text || '').toLowerCase();
+  return normalized.includes('კონკურ') || normalized.includes('შეადარ');
+}
+
+function addAssistantMessage(role, text) {
+  state.assistantMessages.push({ role, text });
+  renderAssistant();
 }
 
 function setView(view) {
@@ -223,6 +425,7 @@ function renderAll() {
   renderServices();
   renderOrders();
   renderRequests();
+  renderAssistant();
   renderApprovals();
 }
 
@@ -274,6 +477,15 @@ function renderBusinessForm() {
   $('business-description').value = business?.description || '';
   $('business-image-url').value = business?.image_url || '';
   $('business-active').checked = business?.is_active !== false;
+  renderWorkingHoursPreset();
+}
+
+function renderWorkingHoursPreset() {
+  const value = $('business-working-hours')?.value || '';
+  document.querySelectorAll('[data-working-hours]').forEach((button) => {
+    const preset = button.dataset.workingHours || '';
+    button.classList.toggle('is-active', preset && preset === value);
+  });
 }
 
 function renderBusinessStatus(business) {
@@ -323,12 +535,14 @@ function renderProducts() {
 
   container.innerHTML = state.products
     .map(
-      (item) => `
+      (item) => {
+        const images = productImageUrls(item);
+        return `
         <article class="list-item">
-          <img class="list-thumb" src="${escapeHtml(item.image_url || '')}" alt="" />
+          <img class="list-thumb" src="${escapeHtml(images[0] || '')}" alt="" />
           <div>
             <h3 class="list-title">${escapeHtml(item.title)}</h3>
-            <p class="list-meta">${escapeHtml(item.category || 'კატეგორია არ აქვს')} · ${formatPrice(item.price_value, item.currency)}</p>
+            <p class="list-meta">${escapeHtml(productCategoryLabels[item.category] || item.category || 'კატეგორია არ აქვს')} · ${formatPrice(item.price_value, item.currency)} · ${images.length} სურათი</p>
             <span class="chip">${item.is_active ? 'აქტიური' : 'გამორთული'}</span>
           </div>
           <div class="item-actions">
@@ -336,7 +550,8 @@ function renderProducts() {
             <button class="danger-button" type="button" data-delete-product="${item.id}">წაშლა</button>
           </div>
         </article>
-      `
+      `;
+      }
     )
     .join('');
 }
@@ -450,6 +665,48 @@ function renderRequests() {
     .join('');
 }
 
+function renderAssistant() {
+  const container = $('assistant-messages');
+  if (!container) return;
+
+  if (!state.assistantMessages.length) {
+    state.assistantMessages = [
+      {
+        role: 'assistant',
+        text: generateAssistantReply('დამიწყე შეფასება'),
+      },
+    ];
+  }
+
+  container.innerHTML = state.assistantMessages
+    .map(
+      (message) => `
+        <div class="assistant-message ${message.role === 'user' ? 'is-user' : 'is-assistant'}">
+          <span>${message.role === 'user' ? 'შენ' : 'ასისტენტი'}</span>
+          <p>${escapeHtml(message.text).replaceAll('\n', '<br />')}</p>
+        </div>
+      `
+    )
+    .join('');
+
+  container.scrollTop = container.scrollHeight;
+}
+
+async function askAssistant(prompt) {
+  const text = String(prompt || '').trim();
+  if (!text) return;
+
+  addAssistantMessage('user', text);
+  try {
+    const reply = isCompetitorPrompt(text)
+      ? await generateCompetitorComparisonReply(text)
+      : generateAssistantReply(text);
+    addAssistantMessage('assistant', reply);
+  } catch (error) {
+    addAssistantMessage('assistant', error.message || 'პასუხის მომზადება ვერ მოხერხდა.');
+  }
+}
+
 async function updateRequestStatus(id, status) {
   const { error } = await client.from('business_booking_requests').update({ status }).eq('id', id);
   if (error) throw error;
@@ -517,6 +774,33 @@ async function uploadFile(inputId, folder) {
   return data.publicUrl;
 }
 
+async function uploadFiles(inputId, folder, limit = 3) {
+  const input = $(inputId);
+  const files = Array.from(input.files || []).slice(0, limit);
+  const urls = [];
+
+  for (const file of files) {
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+    const path = `${state.user.id}/${folder}/${Date.now()}-${urls.length}-${safeName}`;
+    const { error } = await client.storage.from('business-assets').upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+    });
+
+    if (error) throw error;
+
+    const { data } = client.storage.from('business-assets').getPublicUrl(path);
+    urls.push(data.publicUrl);
+  }
+
+  if (input.files?.length > limit) {
+    showMessage(`მაქსიმუმ ${limit} სურათი შეინახება. დანარჩენი გამოტოვებულია.`);
+  }
+
+  input.value = '';
+  return urls;
+}
+
 async function saveBusiness(event) {
   event.preventDefault();
   const uploadedUrl = await uploadFile('business-image-file', 'profiles');
@@ -565,6 +849,12 @@ function parseGoogleLocation() {
   showMessage('Google Maps კოორდინატები შევსებულია.');
 }
 
+function setWorkingHoursPreset(value) {
+  $('business-working-hours').value = value || '';
+  $('business-working-hours').focus();
+  renderWorkingHoursPreset();
+}
+
 async function createBusiness() {
   state.activeBusinessId = null;
   renderBusinessForm();
@@ -591,6 +881,7 @@ function resetProductForm() {
   $('product-discount').value = '';
   $('product-stock').value = '';
   $('product-image-url').value = '';
+  $('product-image-file').value = '';
   $('product-description').value = '';
   $('product-active').checked = true;
 }
@@ -603,12 +894,15 @@ async function saveProduct(event) {
     return;
   }
 
-  const uploadedUrl = await uploadFile('product-image-file', 'products');
+  const uploadedUrls = await uploadFiles('product-image-file', 'products', 3);
+  const typedUrls = normalizeImageUrls($('product-image-url').value);
+  const imageUrls = [...uploadedUrls, ...typedUrls].slice(0, 3);
   const payload = {
     business_id: business.id,
     title: $('product-title').value.trim(),
     description: $('product-description').value.trim() || null,
-    image_url: uploadedUrl || $('product-image-url').value.trim() || null,
+    image_url: imageUrls[0] || null,
+    image_urls: imageUrls,
     price_value: parseNumber($('product-price').value),
     discount_price: parseNumber($('product-discount').value),
     stock_quantity: parseNumber($('product-stock').value),
@@ -646,7 +940,8 @@ function editProduct(id) {
   $('product-price').value = item.price_value ?? '';
   $('product-discount').value = item.discount_price ?? '';
   $('product-stock').value = item.stock_quantity ?? '';
-  $('product-image-url').value = item.image_url || '';
+  $('product-image-url').value = productImageUrls(item).join('\n');
+  $('product-image-file').value = '';
   $('product-description').value = item.description || '';
   $('product-active').checked = item.is_active !== false;
   $('product-title').focus();
@@ -815,6 +1110,10 @@ function bindEvents() {
   $('delete-business').addEventListener('click', () => wrap(deleteBusiness));
   $('business-form').addEventListener('submit', (event) => wrap(() => saveBusiness(event)));
   $('parse-google-location').addEventListener('click', parseGoogleLocation);
+  $('business-working-hours').addEventListener('input', renderWorkingHoursPreset);
+  document.querySelectorAll('[data-working-hours]').forEach((button) => {
+    button.addEventListener('click', () => setWorkingHoursPreset(button.dataset.workingHours || ''));
+  });
 
   $('product-form').addEventListener('submit', (event) => wrap(() => saveProduct(event)));
   $('reset-product').addEventListener('click', resetProductForm);
@@ -842,6 +1141,16 @@ function bindEvents() {
   $('requests-list').addEventListener('change', (event) => {
     const requestId = event.target.dataset.requestStatus;
     if (requestId) wrap(() => updateRequestStatus(requestId, event.target.value));
+  });
+
+  $('assistant-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    askAssistant($('assistant-input').value);
+    $('assistant-input').value = '';
+  });
+
+  document.querySelectorAll('[data-assistant-prompt]').forEach((button) => {
+    button.addEventListener('click', () => askAssistant(button.dataset.assistantPrompt));
   });
 
   $('approvals-list').addEventListener('click', (event) => {

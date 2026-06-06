@@ -120,6 +120,11 @@ const PRODUCT_FILTERS = [
 ];
 
 function getProductCategory(product) {
+  const storedCategory = String(product?.category || '').toLowerCase();
+  if (PRODUCT_FILTERS.some((filter) => filter.id === storedCategory)) {
+    return storedCategory;
+  }
+
   const text = `${product?.title || ''} ${product?.description || ''}`.toLowerCase();
 
   if (text.includes('საკვ') || text.includes('food') || text.includes('premium')) return 'food';
@@ -132,6 +137,14 @@ function getProductCategory(product) {
   if (text.includes('ჯამ') || text.includes('წყლ') || text.includes('bowl')) return 'bowls';
 
   return 'all';
+}
+
+function getProductImages(product) {
+  if (Array.isArray(product?.image_urls) && product.image_urls.length) {
+    return product.image_urls.filter(Boolean).slice(0, 3);
+  }
+
+  return product?.image_url ? [product.image_url] : [];
 }
 
 function getDistance(lat1, lon1, lat2, lon2) {
@@ -552,35 +565,47 @@ export default function OthershopsScreen({ onBack = null, session = null, profil
 
           {visibleProducts.length ? (
           <View style={styles.productsGrid}>
-            {visibleProducts.map((product) => (
-              <TouchableOpacity
-                key={product.id}
-                style={styles.productCard}
-                onPress={() => addToCart(product)}
-                activeOpacity={0.88}
-              >
-                {product.image_url ? (
-                  <Image source={{ uri: product.image_url }} style={styles.productImage} />
-                ) : (
-                  <View style={[styles.productImage, styles.productImageFallback]}>
-                    <Ionicons name="cube-outline" size={34} color="#8aa097" />
-                  </View>
-                )}
-                <View style={styles.productBody}>
-                  <Text style={styles.productTitle} numberOfLines={2}>{product.title}</Text>
-                  <Text style={styles.productDescription} numberOfLines={2}>
-                    {product.description || 'აღწერა მალე დაემატება.'}
-                  </Text>
-                  <View style={styles.productFooter}>
-                    <Text style={styles.productPrice}>{formatProductPrice(product)}</Text>
-                    <View style={styles.productBuyBadge}>
-                      <Ionicons name="add" size={16} color="#ffffff" />
+            {visibleProducts.map((product) => {
+              const productImages = getProductImages(product);
+
+              return (
+                <TouchableOpacity
+                  key={product.id}
+                  style={styles.productCard}
+                  onPress={() => addToCart(product)}
+                  activeOpacity={0.88}
+                >
+                  {productImages[0] ? (
+                    <View>
+                      <Image source={{ uri: productImages[0] }} style={styles.productImage} />
+                      {productImages.length > 1 ? (
+                        <View style={styles.productImageCount}>
+                          <Ionicons name="images-outline" size={13} color="#ffffff" />
+                          <Text style={styles.productImageCountText}>{productImages.length}</Text>
+                        </View>
+                      ) : null}
                     </View>
+                  ) : (
+                    <View style={[styles.productImage, styles.productImageFallback]}>
+                      <Ionicons name="cube-outline" size={34} color="#8aa097" />
+                    </View>
+                  )}
+                  <View style={styles.productBody}>
+                    <Text style={styles.productTitle} numberOfLines={2}>{product.title}</Text>
+                    <Text style={styles.productDescription} numberOfLines={2}>
+                      {product.description || 'აღწერა მალე დაემატება.'}
+                    </Text>
+                    <View style={styles.productFooter}>
+                      <Text style={styles.productPrice}>{formatProductPrice(product)}</Text>
+                      <View style={styles.productBuyBadge}>
+                        <Ionicons name="add" size={16} color="#ffffff" />
+                      </View>
+                    </View>
+                    <Text style={styles.addToCartText}>კალათაში დამატება</Text>
                   </View>
-                  <Text style={styles.addToCartText}>კალათაში დამატება</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
           </View>
           ) : (
             <View style={styles.emptyProducts}>
@@ -1108,6 +1133,20 @@ const styles = StyleSheet.create({
     borderColor: '#e8efeb',
   },
   productImage: { width: '100%', height: 132, resizeMode: 'cover', backgroundColor: '#dfe8e4' },
+  productImageCount: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    minWidth: 34,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(22, 53, 44, 0.84)',
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  productImageCountText: { marginLeft: 4, color: '#ffffff', fontSize: 12, fontWeight: '900' },
   productImageFallback: { alignItems: 'center', justifyContent: 'center' },
   productBody: { padding: 12 },
   productTitle: { color: '#16352c', fontSize: 15, fontWeight: '900', minHeight: 38 },
