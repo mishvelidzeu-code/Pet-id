@@ -71,10 +71,16 @@ button {
   border-radius: 12px;
   display: grid;
   place-items: center;
-  background: #e8f8ee;
-  color: var(--brand-dark);
-  font-weight: 900;
+  background: #ffffff;
+  overflow: hidden;
   box-shadow: inset 0 -8px 18px rgba(46, 139, 87, 0.08);
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .brand span,
