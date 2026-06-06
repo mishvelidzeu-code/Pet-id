@@ -13,11 +13,34 @@ const state = {
   orders: [],
   requests: [],
   assistantMessages: [],
+  adminProducts: [],
+  adminServices: [],
+  adminOrders: [],
+  adminRequests: [],
+  adminPets: [],
+  adminMedicalRecords: [],
+  adminProfiles: [],
+  adminPartnerKind: 'all',
+  expandedAdminPets: [],
 };
 
 const $ = (id) => document.getElementById(id);
 
-const views = ['dashboard', 'profile', 'products', 'services', 'orders', 'requests', 'assistant', 'approvals'];
+const views = [
+  'dashboard',
+  'profile',
+  'products',
+  'services',
+  'orders',
+  'requests',
+  'assistant',
+  'approvals',
+  'admin-stats',
+  'admin-partners',
+  'admin-products',
+  'admin-services',
+  'admin-pets',
+];
 const pageTitles = {
   dashboard: 'დეშბორდი',
   profile: 'ბიზნეს პროფილი',
@@ -27,6 +50,11 @@ const pageTitles = {
   requests: 'მოთხოვნები',
   assistant: 'ასისტენტი',
   approvals: 'დადასტურება',
+  'admin-stats': 'სტატისტიკა',
+  'admin-partners': 'პარტნიორები',
+  'admin-products': 'ყველა პროდუქტი',
+  'admin-services': 'ყველა სერვისი',
+  'admin-pets': 'ცხოველები',
 };
 
 const productCategoryLabels = {
@@ -44,12 +72,42 @@ function activeBusiness() {
   return state.businesses.find((item) => item.id === state.activeBusinessId) || null;
 }
 
-function showMessage(text, isError = false) {
+function showMessage(text, type = 'success') {
   const box = $('message');
   box.textContent = text;
-  box.classList.toggle('is-error', isError);
+  const messageType = type === true ? 'error' : type || 'success';
+  box.classList.toggle('is-error', messageType === 'error');
+  box.classList.toggle('is-warning', messageType === 'warning');
+  box.classList.toggle('is-success', messageType === 'success');
   box.classList.remove('is-hidden');
   window.setTimeout(() => box.classList.add('is-hidden'), 4200);
+}
+
+function setBadge(id, value) {
+  const badge = $(id);
+  if (!badge) return;
+  badge.textContent = value > 99 ? '99+' : String(value);
+  badge.classList.toggle('is-hidden', !value);
+}
+
+function statusLabel(status) {
+  const labels = {
+    new: 'ახალი',
+    confirmed: 'დადასტურებული',
+    done: 'შესრულებული',
+    cancelled: 'უარყოფილი',
+    active: 'აქტიური',
+    hidden: 'დამალული',
+    approved: 'დადასტურებული',
+    waiting: 'ელოდება',
+  };
+  return labels[status] || status || 'ახალი';
+}
+
+function statusTone(status) {
+  if (status === 'confirmed' || status === 'done' || status === 'approved' || status === 'active') return 'success';
+  if (status === 'cancelled' || status === 'hidden') return 'danger';
+  return 'warning';
 }
 
 function parseNumber(value) {
@@ -315,6 +373,7 @@ async function loadSession() {
   if (state.user) {
     await loadUserRole();
     await loadAll();
+    if (state.isAdmin) setView('approvals');
   }
 }
 
@@ -331,8 +390,47 @@ async function loadUserRole() {
 
 async function loadAll() {
   await loadBusinesses();
-  await Promise.all([loadProducts(), loadServices(), loadOrders(), loadRequests()]);
+  await Promise.all([loadProducts(), loadServices(), loadOrders(), loadRequests(), loadAdminData()]);
   renderAll();
+}
+
+async function loadAdminData() {
+  if (!state.isAdmin) {
+    state.adminProducts = [];
+    state.adminServices = [];
+    state.adminPets = [];
+    state.adminMedicalRecords = [];
+    state.adminProfiles = [];
+    return;
+  }
+
+  const [productsResult, servicesResult, ordersResult, requestsResult, petsResult, medicalResult, profilesResult] = await Promise.all([
+    client
+      .from('shop_products')
+      .select('*, business_profiles(name, kind, phone, address)')
+      .order('created_at', { ascending: false }),
+    client
+      .from('business_services')
+      .select('*, business_profiles(name, kind, phone, address)')
+      .order('created_at', { ascending: false }),
+    client.from('shop_orders').select('*').order('created_at', { ascending: false }),
+    client.from('business_booking_requests').select('*').order('created_at', { ascending: false }),
+    client.from('pets').select('*').order('created_at', { ascending: false }),
+    client.from('medical_records').select('*').order('date_administered', { ascending: false }),
+    client.from('profiles').select('*'),
+  ]);
+
+  if (productsResult.error) throw productsResult.error;
+  if (servicesResult.error) throw servicesResult.error;
+  if (petsResult.error) throw petsResult.error;
+
+  state.adminProducts = productsResult.data || [];
+  state.adminServices = servicesResult.data || [];
+  state.adminOrders = ordersResult.error ? [] : ordersResult.data || [];
+  state.adminRequests = requestsResult.error ? [] : requestsResult.data || [];
+  state.adminPets = petsResult.data || [];
+  state.adminMedicalRecords = medicalResult.error ? [] : medicalResult.data || [];
+  state.adminProfiles = profilesResult.error ? [] : profilesResult.data || [];
 }
 
 async function loadBusinesses() {
@@ -427,6 +525,11 @@ function renderAll() {
   renderRequests();
   renderAssistant();
   renderApprovals();
+  renderAdminStats();
+  renderAdminPartners();
+  renderAdminProducts();
+  renderAdminServices();
+  renderAdminPets();
 }
 
 function renderBusinessSelect() {
@@ -452,11 +555,18 @@ function renderBusinessSelect() {
 
 function renderDashboard() {
   const pendingCount = state.businesses.filter((item) => !item.is_approved).length;
+  const ordersForCount = state.isAdmin ? state.adminOrders : state.orders;
+  const requestsForCount = state.isAdmin ? state.adminRequests : state.requests;
+  const newOrdersCount = ordersForCount.filter((item) => item.status === 'new').length;
+  const newRequestsCount = requestsForCount.filter((item) => item.status === 'new').length;
   $('stat-businesses').textContent = state.businesses.length;
   $('stat-products').textContent = state.products.length;
   $('stat-services').textContent = state.services.length;
   $('stat-orders').textContent = state.orders.length + state.requests.length;
   if ($('stat-pending')) $('stat-pending').textContent = pendingCount;
+  setBadge('nav-orders-badge', newOrdersCount);
+  setBadge('nav-requests-badge', newRequestsCount);
+  setBadge('nav-approvals-badge', state.isAdmin ? pendingCount : 0);
 }
 
 function renderBusinessForm() {
@@ -611,7 +721,7 @@ function renderOrders() {
           <div>
             <h3 class="list-title">${escapeHtml(item.product_title || item.shop_products?.title || 'შეკვეთა')}</h3>
             <p class="list-meta">${escapeHtml(item.buyer_name)} · ${escapeHtml(item.phone)} · ${item.quantity || 1} ცალი</p>
-            <span class="chip">${escapeHtml(item.status || 'new')}</span>
+            <span class="chip chip-${statusTone(item.status || 'new')}">${escapeHtml(statusLabel(item.status || 'new'))}</span>
           </div>
           <div class="item-actions">
             <select data-order-status="${item.id}">
@@ -649,7 +759,7 @@ function renderRequests() {
           <div>
             <h3 class="list-title">${escapeHtml(item.requester_name)}</h3>
             <p class="list-meta">${escapeHtml(item.phone)} · ${escapeHtml(item.note || 'შენიშვნა არ არის')}</p>
-            <span class="chip">${escapeHtml(item.status || 'new')}</span>
+            <span class="chip chip-${statusTone(item.status || 'new')}">${escapeHtml(statusLabel(item.status || 'new'))}</span>
           </div>
           <div class="item-actions">
             <select data-request-status="${item.id}">
@@ -710,7 +820,7 @@ async function askAssistant(prompt) {
 async function updateRequestStatus(id, status) {
   const { error } = await client.from('business_booking_requests').update({ status }).eq('id', id);
   if (error) throw error;
-  showMessage('მოთხოვნის სტატუსი განახლდა.');
+  showMessage('მოთხოვნის სტატუსი განახლდა.', statusTone(status) === 'danger' ? 'error' : statusTone(status));
   await loadRequests();
   renderDashboard();
   renderRequests();
@@ -738,8 +848,8 @@ function renderApprovals() {
           <div>
             <h3 class="list-title">${escapeHtml(item.name)}</h3>
             <p class="list-meta">${escapeHtml(item.kind)} · ${escapeHtml(item.address || 'მისამართი არ არის')}</p>
-            <span class="chip">${item.is_approved ? 'approved' : 'waiting'}</span>
-            <span class="chip">${item.is_active ? 'active' : 'hidden'}</span>
+            <span class="chip chip-${statusTone(item.is_approved ? 'approved' : 'waiting')}">${statusLabel(item.is_approved ? 'approved' : 'waiting')}</span>
+            <span class="chip chip-${statusTone(item.is_active ? 'active' : 'hidden')}">${statusLabel(item.is_active ? 'active' : 'hidden')}</span>
           </div>
           <div class="item-actions">
             <button class="secondary-button" type="button" data-approve-business="${item.id}">
@@ -752,6 +862,208 @@ function renderApprovals() {
         </article>
       `
     )
+    .join('');
+}
+
+function profileById(id) {
+  return state.adminProfiles.find((profile) => profile.id === id) || null;
+}
+
+function recordsForPet(petId) {
+  return state.adminMedicalRecords.filter((record) => record.pet_id === petId);
+}
+
+function renderAdminStats() {
+  const container = $('admin-stats-grid');
+  if (!container) return;
+
+  if (!state.isAdmin) {
+    container.innerHTML = '<article class="surface">ეს გვერდი მხოლოდ ადმინისთვისაა.</article>';
+    return;
+  }
+
+  const pendingBusinesses = state.businesses.filter((item) => !item.is_approved).length;
+  const activeBusinesses = state.businesses.filter((item) => item.is_active !== false && item.is_approved).length;
+  const newOrders = state.adminOrders.filter((item) => item.status === 'new').length;
+  const newRequests = state.adminRequests.filter((item) => item.status === 'new').length;
+  const lostPets = state.adminPets.filter((pet) => pet.is_lost).length;
+
+  const stats = [
+    ['პარტნიორები', state.businesses.length],
+    ['აქტიური public-ში', activeBusinesses],
+    ['დასადასტურებელი', pendingBusinesses],
+    ['პროდუქტები', state.adminProducts.length],
+    ['სერვისები', state.adminServices.length],
+    ['ცხოველები', state.adminPets.length],
+    ['დაკარგული ცხოველები', lostPets],
+    ['ახალი მოთხოვნები', newOrders + newRequests],
+  ];
+
+  container.innerHTML = stats
+    .map(([label, value]) => `<article class="stat-card"><span>${label}</span><strong>${value}</strong></article>`)
+    .join('');
+}
+
+function renderAdminPartners() {
+  const filters = $('admin-partner-filters');
+  const container = $('admin-partners-list');
+  if (!filters || !container) return;
+
+  const kinds = [
+    ['all', 'ყველა'],
+    ['shop', 'მაღაზიები'],
+    ['clinic', 'კლინიკები'],
+    ['hotel', 'სასტუმროები'],
+    ['taxi', 'ტაქსი'],
+    ['grooming', 'გრუმინგი'],
+  ];
+
+  filters.innerHTML = kinds
+    .map(([kind, label]) => {
+      const count = kind === 'all' ? state.businesses.length : state.businesses.filter((item) => item.kind === kind).length;
+      return `<button type="button" class="${state.adminPartnerKind === kind ? 'is-active' : ''}" data-admin-kind="${kind}">${label} <span>${count}</span></button>`;
+    })
+    .join('');
+
+  const items =
+    state.adminPartnerKind === 'all'
+      ? state.businesses
+      : state.businesses.filter((item) => item.kind === state.adminPartnerKind);
+
+  if (!items.length) {
+    container.innerHTML = '<div class="surface">ამ კატეგორიაში პარტნიორი ჯერ არ არის.</div>';
+    return;
+  }
+
+  container.innerHTML = items
+    .map(
+      (item) => `
+        <article class="list-item">
+          <img class="list-thumb" src="${escapeHtml(item.image_url || '')}" alt="" />
+          <div>
+            <h3 class="list-title">${escapeHtml(item.name)}</h3>
+            <p class="list-meta">${businessKindLabel(item.kind)} · ${escapeHtml(item.phone || 'ტელეფონი არ არის')} · ${escapeHtml(item.address || 'მისამართი არ არის')}</p>
+            <span class="chip chip-${statusTone(item.is_approved ? 'approved' : 'waiting')}">${statusLabel(item.is_approved ? 'approved' : 'waiting')}</span>
+            <span class="chip chip-${statusTone(item.is_active ? 'active' : 'hidden')}">${statusLabel(item.is_active ? 'active' : 'hidden')}</span>
+          </div>
+          <div class="item-actions">
+            <button class="secondary-button" type="button" data-approve-business="${item.id}">${item.is_approved ? 'დადასტურების მოხსნა' : 'დადასტურება'}</button>
+            <button class="secondary-button" type="button" data-toggle-business="${item.id}">${item.is_active ? 'დამალვა' : 'გააქტიურება'}</button>
+          </div>
+        </article>
+      `
+    )
+    .join('');
+}
+
+function renderAdminProducts() {
+  const container = $('admin-products-list');
+  if (!container) return;
+
+  if (!state.adminProducts.length) {
+    container.innerHTML = '<div class="surface">პროდუქტები ჯერ არ არის.</div>';
+    return;
+  }
+
+  container.innerHTML = state.adminProducts
+    .map((item) => {
+      const images = productImageUrls(item);
+      const business = item.business_profiles || {};
+      return `
+        <article class="list-item">
+          <img class="list-thumb" src="${escapeHtml(images[0] || '')}" alt="" />
+          <div>
+            <h3 class="list-title">${escapeHtml(item.title)}</h3>
+            <p class="list-meta">${escapeHtml(business.name || 'ბიზნესი არ არის')} · ${productCategoryLabels[item.category] || item.category || 'კატეგორია არ აქვს'} · ${formatPrice(item.discount_price ?? item.price_value, item.currency)}</p>
+            <span class="chip chip-${statusTone(item.is_active ? 'active' : 'hidden')}">${statusLabel(item.is_active ? 'active' : 'hidden')}</span>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+}
+
+function renderAdminServices() {
+  const container = $('admin-services-list');
+  if (!container) return;
+
+  if (!state.adminServices.length) {
+    container.innerHTML = '<div class="surface">სერვისები ჯერ არ არის.</div>';
+    return;
+  }
+
+  container.innerHTML = state.adminServices
+    .map((item) => {
+      const business = item.business_profiles || {};
+      return `
+        <article class="list-item">
+          <div class="list-thumb"></div>
+          <div>
+            <h3 class="list-title">${escapeHtml(item.title)}</h3>
+            <p class="list-meta">${escapeHtml(business.name || 'ბიზნესი არ არის')} · ${businessKindLabel(business.kind)} · ${formatPrice(item.price_value, item.currency)}</p>
+            <span class="chip chip-${statusTone(item.is_active ? 'active' : 'hidden')}">${statusLabel(item.is_active ? 'active' : 'hidden')}</span>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+}
+
+function renderAdminPets() {
+  const container = $('admin-pets-list');
+  if (!container) return;
+
+  if (!state.adminPets.length) {
+    container.innerHTML = '<div class="surface">ცხოველები ჯერ არ არის.</div>';
+    return;
+  }
+
+  container.innerHTML = state.adminPets
+    .map((pet) => {
+      const owner = profileById(pet.owner_id);
+      const records = recordsForPet(pet.id);
+      const expanded = state.expandedAdminPets.includes(pet.id);
+      return `
+        <article class="admin-accordion ${expanded ? 'is-open' : ''}">
+          <button class="admin-accordion-head" type="button" data-admin-pet-toggle="${pet.id}">
+            <span>
+              <strong>${escapeHtml(pet.name || 'უსახელო')}</strong>
+              <small>${escapeHtml(pet.breed || 'ჯიში არ არის')} · ${escapeHtml(owner?.full_name || owner?.email || pet.owner_id || 'მფლობელი არ ჩანს')}</small>
+            </span>
+            <span class="chip chip-${pet.is_lost ? 'danger' : 'success'}">${pet.is_lost ? 'დაკარგულია' : 'უსაფრთხოდ'}</span>
+          </button>
+          <div class="admin-accordion-body">
+            <div class="admin-pet-grid">
+              <img class="admin-pet-photo" src="${escapeHtml(pet.photo_url || '')}" alt="" />
+              <div>
+                <p><strong>კოდი:</strong> ${escapeHtml(pet.short_code || '-')}</p>
+                <p><strong>სქესი:</strong> ${escapeHtml(pet.sex || '-')} · <strong>ზომა:</strong> ${escapeHtml(pet.size || '-')} · <strong>წონა:</strong> ${escapeHtml(pet.weight || '-')}</p>
+                <p><strong>ფერი:</strong> ${escapeHtml(pet.color || '-')} · <strong>ლოკაცია:</strong> ${escapeHtml(pet.location || '-')}</p>
+                <p><strong>აღწერა:</strong> ${escapeHtml(pet.description || '-')}</p>
+              </div>
+            </div>
+            <div class="admin-records">
+              <strong>მედ ჩანაწერები (${records.length})</strong>
+              ${
+                records.length
+                  ? records
+                      .map(
+                        (record) => `
+                          <div class="admin-record">
+                            <span>${escapeHtml(record.record_type || 'ჩანაწერი')}</span>
+                            <span>${escapeHtml(record.title || record.name || '-')}</span>
+                            <span>${escapeHtml(record.date_administered || record.created_at || '-')}</span>
+                          </div>
+                        `
+                      )
+                      .join('')
+                  : '<p class="muted">მედ ჩანაწერი ჯერ არ არის.</p>'
+              }
+            </div>
+          </div>
+        </article>
+      `;
+    })
     .join('');
 }
 
@@ -1032,8 +1344,9 @@ async function deleteService(id) {
 async function updateOrderStatus(id, status) {
   const { error } = await client.from('shop_orders').update({ status }).eq('id', id);
   if (error) throw error;
-  showMessage('შეკვეთის სტატუსი განახლდა.');
+  showMessage('შეკვეთის სტატუსი განახლდა.', statusTone(status) === 'danger' ? 'error' : statusTone(status));
   await loadOrders();
+  renderDashboard();
   renderOrders();
 }
 
@@ -1045,7 +1358,8 @@ async function updateBusinessModeration(id, payload) {
 
   const { error } = await client.from('business_profiles').update(payload).eq('id', id);
   if (error) throw error;
-  showMessage('ბიზნესის სტატუსი განახლდა.');
+  const type = payload.is_active === false || payload.is_approved === false ? 'warning' : 'success';
+  showMessage('ბიზნესის სტატუსი განახლდა.', type);
   await loadBusinesses();
   renderAll();
 }
@@ -1063,6 +1377,7 @@ function bindEvents() {
       await loadUserRole();
       setAuthenticated(true);
       await loadAll();
+      if (state.isAdmin) setView('approvals');
     } catch (error) {
       showMessage(error.message, true);
     }
@@ -1081,6 +1396,7 @@ function bindEvents() {
         await loadUserRole();
         setAuthenticated(true);
         await loadAll();
+        if (state.isAdmin) setView('approvals');
       }
     } catch (error) {
       showMessage(error.message, true);
@@ -1166,6 +1482,37 @@ function bindEvents() {
       const item = state.businesses.find((business) => business.id === toggleId);
       if (item) wrap(() => updateBusinessModeration(toggleId, { is_active: !item.is_active }));
     }
+  });
+
+  $('admin-partner-filters').addEventListener('click', (event) => {
+    const kind = event.target.closest('[data-admin-kind]')?.dataset.adminKind;
+    if (!kind) return;
+    state.adminPartnerKind = kind;
+    renderAdminPartners();
+  });
+
+  $('admin-partners-list').addEventListener('click', (event) => {
+    const approveId = event.target.dataset.approveBusiness;
+    const toggleId = event.target.dataset.toggleBusiness;
+
+    if (approveId) {
+      const item = state.businesses.find((business) => business.id === approveId);
+      if (item) wrap(() => updateBusinessModeration(approveId, { is_approved: !item.is_approved }));
+    }
+
+    if (toggleId) {
+      const item = state.businesses.find((business) => business.id === toggleId);
+      if (item) wrap(() => updateBusinessModeration(toggleId, { is_active: !item.is_active }));
+    }
+  });
+
+  $('admin-pets-list').addEventListener('click', (event) => {
+    const petId = event.target.closest('[data-admin-pet-toggle]')?.dataset.adminPetToggle;
+    if (!petId) return;
+    state.expandedAdminPets = state.expandedAdminPets.includes(petId)
+      ? state.expandedAdminPets.filter((id) => id !== petId)
+      : [...state.expandedAdminPets, petId];
+    renderAdminPets();
   });
 }
 

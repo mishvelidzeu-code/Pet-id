@@ -25,10 +25,15 @@
           <button class="nav-item" data-view="profile">პროფილი</button>
           <button class="nav-item" data-view="products">პროდუქტები</button>
           <button class="nav-item" data-view="services">სერვისები</button>
-          <button class="nav-item" data-view="orders">შეკვეთები</button>
-          <button class="nav-item" data-view="requests">მოთხოვნები</button>
+          <button class="nav-item" data-view="orders">შეკვეთები <span id="nav-orders-badge" class="nav-badge is-hidden">0</span></button>
+          <button class="nav-item" data-view="requests">მოთხოვნები <span id="nav-requests-badge" class="nav-badge is-hidden">0</span></button>
           <button class="nav-item" data-view="assistant">ასისტენტი</button>
-          <button class="nav-item admin-only is-hidden" data-view="approvals">დადასტურება</button>
+          <button class="nav-item admin-only is-hidden" data-view="approvals">დადასტურება <span id="nav-approvals-badge" class="nav-badge is-hidden">0</span></button>
+          <button class="nav-item admin-only is-hidden" data-view="admin-stats">სტატისტიკა</button>
+          <button class="nav-item admin-only is-hidden" data-view="admin-partners">პარტნიორები</button>
+          <button class="nav-item admin-only is-hidden" data-view="admin-products">ყველა პროდუქტი</button>
+          <button class="nav-item admin-only is-hidden" data-view="admin-services">ყველა სერვისი</button>
+          <button class="nav-item admin-only is-hidden" data-view="admin-pets">ცხოველები</button>
         </nav>
 
         <div class="sidebar-foot">
@@ -323,6 +328,31 @@
               <p class="muted">Public აპში გამოჩნდება მხოლოდ ის ბიზნესი, რომელსაც ჩართული აქვს `active` და `approved`.</p>
             </article>
             <div id="approvals-list" class="list"></div>
+          </section>
+
+          <section id="admin-stats" class="view-section is-hidden">
+            <div id="admin-stats-grid" class="stats-grid"></div>
+          </section>
+
+          <section id="admin-partners" class="view-section is-hidden">
+            <article class="surface">
+              <h2>პარტნიორები</h2>
+              <p class="muted">აირჩიე კატეგორია და ნახე ყველა პარტნიორი საკონტაქტოებით, სტატუსებით და ლოკაციით.</p>
+              <div id="admin-partner-filters" class="admin-filter-row"></div>
+            </article>
+            <div id="admin-partners-list" class="list"></div>
+          </section>
+
+          <section id="admin-products" class="view-section is-hidden">
+            <div id="admin-products-list" class="list"></div>
+          </section>
+
+          <section id="admin-services" class="view-section is-hidden">
+            <div id="admin-services-list" class="list"></div>
+          </section>
+
+          <section id="admin-pets" class="view-section is-hidden">
+            <div id="admin-pets-list" class="list"></div>
           </section>
         </section>
       </section>
