@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/partner-panel/index.html"
+    },
+    {
+      "source": "/app.js",
+      "destination": "/partner-panel/app.js"
+    },
+    {
+      "source": "/styles.css",
+      "destination": "/partner-panel/styles.css"
+    }
+  ]
+}
