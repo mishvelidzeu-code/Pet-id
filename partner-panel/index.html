@@ -249,6 +249,9 @@
                 <button id="reset-product" class="secondary-button" type="button">გასუფთავება</button>
               </div>
             </form>
+            <div class="search-panel">
+              <input id="products-search" data-search-key="products" placeholder="პროდუქტის ძებნა..." />
+            </div>
             <div id="products-list" class="list"></div>
           </section>
 
@@ -284,14 +287,23 @@
                 <button id="reset-service" class="secondary-button" type="button">გასუფთავება</button>
               </div>
             </form>
+            <div class="search-panel">
+              <input id="services-search" data-search-key="services" placeholder="სერვისის ძებნა..." />
+            </div>
             <div id="services-list" class="list"></div>
           </section>
 
           <section id="orders" class="view-section is-hidden">
+            <div class="search-panel">
+              <input id="orders-search" data-search-key="orders" placeholder="შეკვეთის ძებნა..." />
+            </div>
             <div id="orders-list" class="list"></div>
           </section>
 
           <section id="requests" class="view-section is-hidden">
+            <div class="search-panel">
+              <input id="requests-search" data-search-key="requests" placeholder="მოთხოვნის ძებნა..." />
+            </div>
             <div id="requests-list" class="list"></div>
           </section>
 
@@ -327,6 +339,9 @@
               <h2>პარტნიორების დადასტურება</h2>
               <p class="muted">Public აპში გამოჩნდება მხოლოდ ის ბიზნესი, რომელსაც ჩართული აქვს `active` და `approved`.</p>
             </article>
+            <div class="search-panel">
+              <input id="approvals-search" data-search-key="approvals" placeholder="დასადასტურებელი პარტნიორის ძებნა..." />
+            </div>
             <div id="approvals-list" class="list"></div>
           </section>
 
@@ -340,18 +355,30 @@
               <p class="muted">აირჩიე კატეგორია და ნახე ყველა პარტნიორი საკონტაქტოებით, სტატუსებით და ლოკაციით.</p>
               <div id="admin-partner-filters" class="admin-filter-row"></div>
             </article>
+            <div class="search-panel">
+              <input id="admin-partners-search" data-search-key="adminPartners" placeholder="პარტნიორის ძებნა..." />
+            </div>
             <div id="admin-partners-list" class="list"></div>
           </section>
 
           <section id="admin-products" class="view-section is-hidden">
+            <div class="search-panel">
+              <input id="admin-products-search" data-search-key="adminProducts" placeholder="ყველა პროდუქტში ძებნა..." />
+            </div>
             <div id="admin-products-list" class="list"></div>
           </section>
 
           <section id="admin-services" class="view-section is-hidden">
+            <div class="search-panel">
+              <input id="admin-services-search" data-search-key="adminServices" placeholder="ყველა სერვისში ძებნა..." />
+            </div>
             <div id="admin-services-list" class="list"></div>
           </section>
 
           <section id="admin-pets" class="view-section is-hidden">
+            <div class="search-panel">
+              <input id="admin-pets-search" data-search-key="adminPets" placeholder="ცხოველის, პატრონის ან კოდის ძებნა..." />
+            </div>
             <div id="admin-pets-list" class="list"></div>
           </section>
         </section>

@@ -521,6 +521,24 @@ textarea:focus {
   border-color: #fecaca;
 }
 
+.search-panel {
+  margin-top: 16px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: var(--shadow-soft);
+}
+
+.surface + .search-panel {
+  margin-top: 16px;
+}
+
+.search-panel input {
+  background: #f8fbf9;
+  border-color: #dce8e2;
+}
+
 @keyframes messagePop {
   from {
     transform: translateY(-4px);

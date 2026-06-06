@@ -22,6 +22,7 @@ const state = {
   adminProfiles: [],
   adminPartnerKind: 'all',
   expandedAdminPets: [],
+  searches: {},
 };
 
 const $ = (id) => document.getElementById(id);
@@ -152,6 +153,16 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function searchValue(key) {
+  return String(state.searches[key] || '').trim().toLowerCase();
+}
+
+function matchesSearch(item, key, fields) {
+  const query = searchValue(key);
+  if (!query) return true;
+  return fields(item).some((value) => String(value ?? '').toLowerCase().includes(query));
 }
 
 function normalizeImageUrls(value) {
@@ -641,12 +652,22 @@ function renderProducts() {
     return;
   }
 
-  if (!state.products.length) {
+  const items = state.products.filter((item) =>
+    matchesSearch(item, 'products', (product) => [
+      product.title,
+      product.description,
+      product.category,
+      productCategoryLabels[product.category],
+      product.price_value,
+    ])
+  );
+
+  if (!items.length) {
     container.innerHTML = '<div class="surface">პროდუქტები ჯერ არ არის დამატებული.</div>';
     return;
   }
 
-  container.innerHTML = state.products
+  container.innerHTML = items
     .map(
       (item) => {
         const images = productImageUrls(item);
@@ -678,12 +699,22 @@ function renderServices() {
     return;
   }
 
-  if (!state.services.length) {
+  const items = state.services.filter((item) =>
+    matchesSearch(item, 'services', (service) => [
+      service.title,
+      service.description,
+      service.category,
+      service.price_value,
+      service.duration_minutes,
+    ])
+  );
+
+  if (!items.length) {
     container.innerHTML = '<div class="surface">სერვისები ჯერ არ არის დამატებული.</div>';
     return;
   }
 
-  container.innerHTML = state.services
+  container.innerHTML = items
     .map(
       (item) => `
         <article class="list-item">
@@ -711,12 +742,23 @@ function renderOrders() {
     return;
   }
 
-  if (!state.orders.length) {
+  const items = state.orders.filter((item) =>
+    matchesSearch(item, 'orders', (order) => [
+      order.product_title,
+      order.shop_products?.title,
+      order.buyer_name,
+      order.phone,
+      order.status,
+      statusLabel(order.status),
+    ])
+  );
+
+  if (!items.length) {
     container.innerHTML = '<div class="surface">შეკვეთები ჯერ არ არის.</div>';
     return;
   }
 
-  container.innerHTML = state.orders
+  container.innerHTML = items
     .map(
       (item) => `
         <article class="list-item">
@@ -749,12 +791,22 @@ function renderRequests() {
     return;
   }
 
-  if (!state.requests.length) {
+  const items = state.requests.filter((item) =>
+    matchesSearch(item, 'requests', (request) => [
+      request.requester_name,
+      request.phone,
+      request.note,
+      request.status,
+      statusLabel(request.status),
+    ])
+  );
+
+  if (!items.length) {
     container.innerHTML = '<div class="surface">დაჯავშნის მოთხოვნები ჯერ არ არის.</div>';
     return;
   }
 
-  container.innerHTML = state.requests
+  container.innerHTML = items
     .map(
       (item) => `
         <article class="list-item">
@@ -838,12 +890,24 @@ function renderApprovals() {
     return;
   }
 
-  if (!state.businesses.length) {
+  const approvalItems = state.businesses.filter((item) =>
+    matchesSearch(item, 'approvals', (business) => [
+      business.name,
+      business.kind,
+      businessKindLabel(business.kind),
+      business.phone,
+      business.address,
+      business.is_approved ? 'დადასტურებული' : 'ელოდება',
+      business.is_active ? 'აქტიური' : 'დამალული',
+    ])
+  );
+
+  if (!approvalItems.length) {
     container.innerHTML = '<div class="surface">პარტნიორი ბიზნესი ჯერ არ არის.</div>';
     return;
   }
 
-  container.innerHTML = state.businesses
+  container.innerHTML = approvalItems
     .map(
       (item) => `
         <article class="list-item">
@@ -932,13 +996,25 @@ function renderAdminPartners() {
     state.adminPartnerKind === 'all'
       ? state.businesses
       : state.businesses.filter((item) => item.kind === state.adminPartnerKind);
+  const filteredItems = items.filter((item) =>
+    matchesSearch(item, 'adminPartners', (business) => [
+      business.name,
+      business.kind,
+      businessKindLabel(business.kind),
+      business.phone,
+      business.whatsapp,
+      business.address,
+      business.working_hours,
+      business.description,
+    ])
+  );
 
-  if (!items.length) {
+  if (!filteredItems.length) {
     container.innerHTML = '<div class="surface">ამ კატეგორიაში პარტნიორი ჯერ არ არის.</div>';
     return;
   }
 
-  container.innerHTML = items
+  container.innerHTML = filteredItems
     .map(
       (item) => `
         <article class="list-item">
@@ -963,12 +1039,25 @@ function renderAdminProducts() {
   const container = $('admin-products-list');
   if (!container) return;
 
-  if (!state.adminProducts.length) {
+  const items = state.adminProducts.filter((item) =>
+    matchesSearch(item, 'adminProducts', (product) => [
+      product.title,
+      product.description,
+      product.category,
+      productCategoryLabels[product.category],
+      product.price_value,
+      product.discount_price,
+      product.business_profiles?.name,
+      businessKindLabel(product.business_profiles?.kind),
+    ])
+  );
+
+  if (!items.length) {
     container.innerHTML = '<div class="surface">პროდუქტები ჯერ არ არის.</div>';
     return;
   }
 
-  container.innerHTML = state.adminProducts
+  container.innerHTML = items
     .map((item) => {
       const images = productImageUrls(item);
       const business = item.business_profiles || {};
@@ -990,12 +1079,24 @@ function renderAdminServices() {
   const container = $('admin-services-list');
   if (!container) return;
 
-  if (!state.adminServices.length) {
+  const items = state.adminServices.filter((item) =>
+    matchesSearch(item, 'adminServices', (service) => [
+      service.title,
+      service.description,
+      service.category,
+      service.price_value,
+      service.duration_minutes,
+      service.business_profiles?.name,
+      businessKindLabel(service.business_profiles?.kind),
+    ])
+  );
+
+  if (!items.length) {
     container.innerHTML = '<div class="surface">სერვისები ჯერ არ არის.</div>';
     return;
   }
 
-  container.innerHTML = state.adminServices
+  container.innerHTML = items
     .map((item) => {
       const business = item.business_profiles || {};
       return `
@@ -1016,12 +1117,32 @@ function renderAdminPets() {
   const container = $('admin-pets-list');
   if (!container) return;
 
-  if (!state.adminPets.length) {
+  const items = state.adminPets.filter((pet) => {
+    const owner = profileById(pet.owner_id);
+    const records = recordsForPet(pet.id);
+    return matchesSearch(pet, 'adminPets', () => [
+      pet.name,
+      pet.breed,
+      pet.short_code,
+      pet.sex,
+      pet.size,
+      pet.weight,
+      pet.color,
+      pet.location,
+      pet.description,
+      owner?.full_name,
+      owner?.email,
+      pet.owner_id,
+      ...records.flatMap((record) => [record.record_type, record.title, record.name, record.date_administered]),
+    ]);
+  });
+
+  if (!items.length) {
     container.innerHTML = '<div class="surface">ცხოველები ჯერ არ არის.</div>';
     return;
   }
 
-  container.innerHTML = state.adminPets
+  container.innerHTML = items
     .map((pet) => {
       const owner = profileById(pet.owner_id);
       const records = recordsForPet(pet.id);
@@ -1470,6 +1591,21 @@ function bindEvents() {
 
   document.querySelectorAll('[data-assistant-prompt]').forEach((button) => {
     button.addEventListener('click', () => askAssistant(button.dataset.assistantPrompt));
+  });
+
+  document.querySelectorAll('[data-search-key]').forEach((input) => {
+    input.addEventListener('input', () => {
+      state.searches[input.dataset.searchKey] = input.value;
+      renderProducts();
+      renderServices();
+      renderOrders();
+      renderRequests();
+      renderApprovals();
+      renderAdminPartners();
+      renderAdminProducts();
+      renderAdminServices();
+      renderAdminPets();
+    });
   });
 
   $('approvals-list').addEventListener('click', (event) => {
