@@ -242,6 +242,7 @@ function Dashboard({
   const [isMedDatePickerVisible, setMedDatePickerVisible] = useState(false);
   const [isAddModalVisible, setAddModalVisible] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [expandedPetIds, setExpandedPetIds] = useState({});
   
   // პასპორტის სურათის სრულ ეკრანზე სანახავი state
   const [viewerImage, setViewerImage] = useState(null);
@@ -421,6 +422,7 @@ function Dashboard({
       }
 
       setPets(pts || []);
+      setExpandedPetIds({});
     } catch (error) {
       console.log('Profile fetch error:', error);
       Alert.alert('პროფილი ვერ ჩაიტვირთა', error.message || 'მონაცემების წამოღება ვერ მოხერხდა.');
@@ -594,6 +596,13 @@ function Dashboard({
     }
 
     onPrimaryPetChanged?.(id);
+  }
+
+  function toggleProfilePet(petId) {
+    setExpandedPetIds((current) => ({
+      ...current,
+      [petId]: !current[petId],
+    }));
   }
 
   async function confirmToggleLost(id, currentStatus) {
@@ -863,7 +872,10 @@ function Dashboard({
           </TouchableOpacity>
         </View>
 
-        {pets.map((pet) => (
+        {pets.map((pet) => {
+          const isExpanded = Boolean(expandedPetIds[pet.id]);
+
+          return (
           <View key={pet.id} style={[styles.petCard, pet.is_lost && styles.petCardLost]}>
             <View style={styles.petTopRow}>
               <TouchableOpacity
@@ -899,13 +911,26 @@ function Dashboard({
 
               <View style={styles.petContent}>
                 <View style={styles.petHeaderRow}>
-                  <View style={styles.petTitleWrap}>
+                  <TouchableOpacity
+                    style={styles.petTitleWrap}
+                    onPress={() => toggleProfilePet(pet.id)}
+                    activeOpacity={0.84}
+                  >
                     <Text style={styles.petName} numberOfLines={1}>{pet.name}</Text>
                     <Text style={styles.petBreedText} numberOfLines={1}>
                       {pet.breed || 'ჯიში უცნობია'}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
 
+                  <TouchableOpacity
+                    style={styles.petExpandBtn}
+                    onPress={() => toggleProfilePet(pet.id)}
+                    activeOpacity={0.84}
+                  >
+                    <Text style={styles.petExpandBtnText}>{isExpanded ? '▲' : '▼'}</Text>
+                  </TouchableOpacity>
+
+                  {isExpanded ? (
                   <View style={styles.petActions}>
                     <TouchableOpacity
                       onPress={() => setPrimaryPet(pet.id)}
@@ -941,8 +966,11 @@ function Dashboard({
                       <Text style={[styles.actionBtnText, styles.actionBtnDangerText]}>წაშლა</Text>
                     </TouchableOpacity>
                   </View>
+                  ) : null}
                 </View>
 
+                {isExpanded ? (
+                <>
                 <View style={styles.petInfoGrid}>
                   <View style={[styles.petInfoCard, styles.petInfoCardStrong]}>
                     <Text style={styles.petInfoLabelStrong}>Pet ID</Text>
@@ -1000,9 +1028,13 @@ function Dashboard({
                   <Text style={styles.idBadgeLabel}>Pet ID</Text>
                   <Text style={styles.codeText}>{pet.short_code}</Text>
                 </View>
+                </>
+                ) : null}
               </View>
             </View>
 
+            {isExpanded ? (
+            <>
             <View style={styles.petSummaryGrid}>
               <View style={[styles.petSummaryCard, styles.petSummaryCardStrong]}>
                 <Text style={styles.petInfoLabelStrong}>Pet ID</Text>
@@ -1072,8 +1104,11 @@ function Dashboard({
                 onValueChange={() => confirmToggleLost(pet.id, pet.is_lost)}
               />
             </View>
+            </>
+            ) : null}
           </View>
-        ))}
+          );
+        })}
 
         <TouchableOpacity style={styles.profileHeader} onPress={() => setIsProfileOpen(!isProfileOpen)} activeOpacity={0.8}>
           <Text style={styles.profileHeaderText}>👤 ჩემი პროფილი</Text>
@@ -1685,6 +1720,21 @@ const styles = StyleSheet.create({
   petTitleWrap: { flex: 1, paddingRight: 0 },
   petName: { fontSize: 21, fontWeight: '800', color: '#16231d' },
   petBreedText: { fontSize: 13, color: '#5b6b63', marginTop: 4, fontWeight: '700' },
+  petExpandBtn: {
+    width: 40,
+    height: 34,
+    borderRadius: 14,
+    backgroundColor: '#eef6f1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 10,
+  },
+  petExpandBtnText: {
+    color: '#2e8b57',
+    fontSize: 12,
+    fontWeight: '900',
+  },
   petActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', marginLeft: 0, marginTop: 10 },
   actionBtn: {
     minWidth: 68,

@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="ka">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PetID Partner Panel</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">P</div>
+          <div>
+            <strong>PetID Partner</strong>
+            <span>ბიზნეს პანელი</span>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-item is-active" data-view="dashboard">დეშბორდი</button>
+          <button class="nav-item" data-view="profile">პროფილი</button>
+          <button class="nav-item" data-view="products">პროდუქტები</button>
+          <button class="nav-item" data-view="services">სერვისები</button>
+          <button class="nav-item" data-view="orders">შეკვეთები</button>
+          <button class="nav-item" data-view="requests">მოთხოვნები</button>
+          <button class="nav-item admin-only is-hidden" data-view="approvals">დადასტურება</button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <span id="active-email">არ ხართ შესული</span>
+          <button id="sign-out" class="ghost-button" type="button">გასვლა</button>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <section id="auth-view" class="auth-card">
+          <div>
+            <p class="eyebrow">Partner access</p>
+            <h1>შედით ბიზნეს პანელში</h1>
+            <p class="muted">პარტნიორი შეძლებს თავისი ობიექტის, პროდუქტების, ფასებისა და შეკვეთების მართვას.</p>
+          </div>
+
+          <form id="auth-form" class="form-grid">
+            <label>
+              Email
+              <input id="auth-email" type="email" autocomplete="email" required />
+            </label>
+            <label>
+              Password
+              <input id="auth-password" type="password" autocomplete="current-password" required />
+            </label>
+            <div class="button-row">
+              <button class="primary-button" type="submit">შესვლა</button>
+              <button id="sign-up" class="secondary-button" type="button">რეგისტრაცია</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="panel-view" class="panel-view is-hidden">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">მართვის სივრცე</p>
+              <h1 id="page-title">დეშბორდი</h1>
+            </div>
+            <div class="business-picker">
+              <select id="business-select"></select>
+              <button id="new-business" class="secondary-button" type="button">+ ბიზნესი</button>
+            </div>
+          </header>
+
+          <div id="message" class="message is-hidden"></div>
+
+          <section id="dashboard" class="view-section">
+            <div class="stats-grid">
+              <article class="stat-card">
+                <span>ბიზნესები</span>
+                <strong id="stat-businesses">0</strong>
+              </article>
+              <article class="stat-card">
+                <span>პროდუქტები</span>
+                <strong id="stat-products">0</strong>
+              </article>
+              <article class="stat-card">
+                <span>სერვისები</span>
+                <strong id="stat-services">0</strong>
+              </article>
+              <article class="stat-card">
+                <span>შეკვეთები</span>
+                <strong id="stat-orders">0</strong>
+              </article>
+              <article class="stat-card admin-only is-hidden">
+                <span>დასადასტურებელი</span>
+                <strong id="stat-pending">0</strong>
+              </article>
+            </div>
+
+            <div class="content-grid">
+              <article class="surface">
+                <h2>შემდეგი ნაბიჯი</h2>
+                <p class="muted">შეავსეთ ბიზნეს პროფილი, დაამატეთ სურათი, შემდეგ პროდუქტები ან სერვისები. ადმინი დაადასტურებს ობიექტს და ის public სიებში გამოჩნდება.</p>
+              </article>
+              <article class="surface">
+                <h2>მონაცემების წესი</h2>
+                <p class="muted">პარტნიორი ხედავს მხოლოდ საკუთარ ჩანაწერებს. ადმინი ხედავს ყველას. აპი public მხარეს მხოლოდ აქტიურ და დადასტურებულ მონაცემებს აჩვენებს.</p>
+              </article>
+            </div>
+          </section>
+
+          <section id="profile" class="view-section is-hidden">
+            <form id="business-form" class="surface form-grid two-col">
+              <div id="business-status-card" class="status-card wide"></div>
+              <label>
+                ტიპი
+                <select id="business-kind" required>
+                  <option value="shop">ზოო შოპი</option>
+                  <option value="clinic">კლინიკა</option>
+                  <option value="hotel">სასტუმრო</option>
+                  <option value="taxi">Pet Taxi</option>
+                  <option value="grooming">გრუმინგი & ბარბერი</option>
+                </select>
+              </label>
+              <label>
+                სახელი
+                <input id="business-name" required />
+              </label>
+              <label>
+                ტელეფონი
+                <input id="business-phone" />
+              </label>
+              <label>
+                WhatsApp
+                <input id="business-whatsapp" placeholder="+995..." />
+              </label>
+              <label>
+                მისამართი
+                <input id="business-address" />
+              </label>
+              <label class="wide">
+                Google Maps ლოკაცია
+                <input id="business-google-maps-url" placeholder="ჩასვით Google Maps-ის ბმული" />
+              </label>
+              <div class="location-tools wide">
+                <button id="parse-google-location" class="secondary-button" type="button">კოორდინატების ამოღება</button>
+                <span class="muted">სრული Google Maps ბმულიდან ავტომატურად შეივსება Latitude/Longitude.</span>
+              </div>
+              <label>
+                სამუშაო საათები
+                <input id="business-working-hours" placeholder="ორშ-შაბ 10:00-19:00" />
+              </label>
+              <label>
+                Latitude
+                <input id="business-lat" inputmode="decimal" />
+              </label>
+              <label>
+                Longitude
+                <input id="business-lng" inputmode="decimal" />
+              </label>
+              <label class="wide">
+                აღწერა
+                <textarea id="business-description" rows="4"></textarea>
+              </label>
+              <label class="wide">
+                სურათის URL
+                <input id="business-image-url" />
+              </label>
+              <label>
+                სურათის ატვირთვა
+                <input id="business-image-file" type="file" accept="image/*" />
+              </label>
+              <label class="check-row">
+                <input id="business-active" type="checkbox" checked />
+                აქტიური
+              </label>
+              <div class="button-row wide">
+                <button class="primary-button" type="submit">პროფილის შენახვა</button>
+                <button id="delete-business" class="danger-button" type="button">ბიზნესის წაშლა</button>
+              </div>
+            </form>
+          </section>
+
+          <section id="products" class="view-section is-hidden">
+            <form id="product-form" class="surface form-grid two-col">
+              <input id="product-id" type="hidden" />
+              <label>
+                პროდუქტის სახელი
+                <input id="product-title" required />
+              </label>
+              <label>
+                კატეგორია
+                <input id="product-category" placeholder="საკვები, წამლები, აქსესუარი..." />
+              </label>
+              <label>
+                ფასი
+                <input id="product-price" inputmode="decimal" />
+              </label>
+              <label>
+                ფასდაკლებული ფასი
+                <input id="product-discount" inputmode="decimal" />
+              </label>
+              <label>
+                მარაგი
+                <input id="product-stock" inputmode="numeric" />
+              </label>
+              <label>
+                სურათის ატვირთვა
+                <input id="product-image-file" type="file" accept="image/*" />
+              </label>
+              <label class="wide">
+                სურათის URL
+                <input id="product-image-url" />
+              </label>
+              <label class="wide">
+                აღწერა
+                <textarea id="product-description" rows="3"></textarea>
+              </label>
+              <label class="check-row">
+                <input id="product-active" type="checkbox" checked />
+                აქტიური
+              </label>
+              <div class="button-row wide">
+                <button class="primary-button" type="submit">პროდუქტის შენახვა</button>
+                <button id="reset-product" class="secondary-button" type="button">გასუფთავება</button>
+              </div>
+            </form>
+            <div id="products-list" class="list"></div>
+          </section>
+
+          <section id="services" class="view-section is-hidden">
+            <form id="service-form" class="surface form-grid two-col">
+              <input id="service-id" type="hidden" />
+              <label>
+                სერვისი
+                <input id="service-title" required />
+              </label>
+              <label>
+                კატეგორია
+                <input id="service-category" placeholder="კონსულტაცია, დაბანა, ტრანსპორტი..." />
+              </label>
+              <label>
+                ფასი
+                <input id="service-price" inputmode="decimal" />
+              </label>
+              <label>
+                ხანგრძლივობა წუთებში
+                <input id="service-duration" inputmode="numeric" />
+              </label>
+              <label class="wide">
+                აღწერა
+                <textarea id="service-description" rows="3"></textarea>
+              </label>
+              <label class="check-row">
+                <input id="service-active" type="checkbox" checked />
+                აქტიური
+              </label>
+              <div class="button-row wide">
+                <button class="primary-button" type="submit">სერვისის შენახვა</button>
+                <button id="reset-service" class="secondary-button" type="button">გასუფთავება</button>
+              </div>
+            </form>
+            <div id="services-list" class="list"></div>
+          </section>
+
+          <section id="orders" class="view-section is-hidden">
+            <div id="orders-list" class="list"></div>
+          </section>
+
+          <section id="requests" class="view-section is-hidden">
+            <div id="requests-list" class="list"></div>
+          </section>
+
+          <section id="approvals" class="view-section is-hidden">
+            <article class="surface">
+              <h2>პარტნიორების დადასტურება</h2>
+              <p class="muted">Public აპში გამოჩნდება მხოლოდ ის ბიზნესი, რომელსაც ჩართული აქვს `active` და `approved`.</p>
+            </article>
+            <div id="approvals-list" class="list"></div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

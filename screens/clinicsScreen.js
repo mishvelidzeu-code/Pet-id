@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { fetchPublicClinics } from '../lib/contentService';
+import BookingRequestModal from '../components/BookingRequestModal';
 
 function getDistance(lat1, lon1, lat2, lon2) {
   const radius = 6371;
@@ -55,11 +56,12 @@ function ScreenHeader({ onBack }) {
   );
 }
 
-export default function ClinicsScreen({ onBack = null }) {
+export default function ClinicsScreen({ onBack = null, session = null, profile = null }) {
   const [clinics, setClinics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [bookingClinic, setBookingClinic] = useState(null);
 
   const visibleClinics = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -71,7 +73,12 @@ export default function ClinicsScreen({ onBack = null }) {
     return clinics.filter((clinic) => {
       const clinicName = String(clinic.name || '').toLowerCase();
       const clinicAddress = String(clinic.address || '').toLowerCase();
-      return clinicName.includes(normalizedQuery) || clinicAddress.includes(normalizedQuery);
+      const clinicServices = String(clinic.services_preview || '').toLowerCase();
+      return (
+        clinicName.includes(normalizedQuery) ||
+        clinicAddress.includes(normalizedQuery) ||
+        clinicServices.includes(normalizedQuery)
+      );
     });
   }, [clinics, searchQuery]);
 
@@ -131,16 +138,35 @@ export default function ClinicsScreen({ onBack = null }) {
     setRefreshing(false);
   }
 
-  function openMaps(lat, lng) {
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  function openMaps(clinic) {
+    const url =
+      clinic.google_maps_url ||
+      `https://www.google.com/maps/dir/?api=1&destination=${clinic.lat},${clinic.lng}`;
     Linking.openURL(url).catch(() =>
       Alert.alert('შეცდომა', 'რუკის გახსნა ვერ მოხერხდა.')
     );
   }
 
   function makeCall(phone) {
+    if (!phone) {
+      Alert.alert('შეცდომა', 'ტელეფონის ნომერი მითითებული არ არის.');
+      return;
+    }
+
     Linking.openURL(`tel:${phone}`).catch(() =>
       Alert.alert('შეცდომა', 'დარეკვა ვერ მოხერხდა.')
+    );
+  }
+
+  function openWhatsApp(phone) {
+    if (!phone) {
+      Alert.alert('შეცდომა', 'WhatsApp ნომერი მითითებული არ არის.');
+      return;
+    }
+
+    const normalizedPhone = String(phone).replace(/[^\d]/g, '');
+    Linking.openURL(`https://wa.me/${normalizedPhone}`).catch(() =>
+      Alert.alert('შეცდომა', 'WhatsApp-ის გახსნა ვერ მოხერხდა.')
     );
   }
 
@@ -202,7 +228,40 @@ export default function ClinicsScreen({ onBack = null }) {
                     <Ionicons name="location-outline" size={16} color="#0066cc" />
                     <Text style={styles.address}>{clinic.address}</Text>
                   </View>
+                  {clinic.working_hours ? (
+                    <View style={styles.addressRow}>
+                      <Ionicons name="time-outline" size={16} color="#2e8b57" />
+                      <Text style={styles.address}>{clinic.working_hours}</Text>
+                    </View>
+                  ) : null}
+                  {clinic.services?.length ? (
+                    <View style={styles.serviceList}>
+                      {clinic.services.slice(0, 5).map((service) => (
+                        <View key={service.id} style={styles.serviceRow}>
+                          <Text style={styles.serviceName} numberOfLines={1}>
+                            {service.title}
+                          </Text>
+                          <Text style={styles.servicePrice}>{service.price_label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : clinic.services_preview ? (
+                    <View style={styles.servicesPreview}>
+                      <Ionicons name="medical-outline" size={14} color="#2e8b57" />
+                      <Text style={styles.servicesPreviewText}>{clinic.services_preview}</Text>
+                    </View>
+                  ) : null}
                   <View style={styles.actions}>
+                    {clinic.business_id ? (
+                      <TouchableOpacity
+                        style={styles.bookingButton}
+                        onPress={() => setBookingClinic(clinic)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="calendar-outline" size={16} color="#ffffff" />
+                        <Text style={styles.bookingText}>დაჯავშნა</Text>
+                      </TouchableOpacity>
+                    ) : null}
                     <TouchableOpacity
                       style={styles.callButton}
                       onPress={() => makeCall(clinic.phone)}
@@ -211,10 +270,20 @@ export default function ClinicsScreen({ onBack = null }) {
                       <Ionicons name="call-outline" size={16} color="#2e8b57" />
                       <Text style={styles.callText}>დარეკვა</Text>
                     </TouchableOpacity>
-                    {clinic.lat != null && clinic.lng != null ? (
+                    {clinic.whatsapp ? (
+                      <TouchableOpacity
+                        style={styles.whatsappButton}
+                        onPress={() => openWhatsApp(clinic.whatsapp)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="logo-whatsapp" size={16} color="#128c7e" />
+                        <Text style={styles.whatsappText}>WhatsApp</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {clinic.google_maps_url || (clinic.lat != null && clinic.lng != null) ? (
                       <TouchableOpacity
                         style={styles.mapButton}
-                        onPress={() => openMaps(clinic.lat, clinic.lng)}
+                        onPress={() => openMaps(clinic)}
                         activeOpacity={0.8}
                       >
                         <Ionicons name="navigate-outline" size={16} color="#0066cc" />
@@ -228,6 +297,14 @@ export default function ClinicsScreen({ onBack = null }) {
           )}
         </ScrollView>
       )}
+
+      <BookingRequestModal
+        visible={Boolean(bookingClinic)}
+        business={bookingClinic}
+        session={session}
+        profile={profile}
+        onClose={() => setBookingClinic(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -321,20 +398,88 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   address: { color: '#687b74', marginLeft: 8, lineHeight: 20, flex: 1 },
-  actions: { flexDirection: 'row', marginTop: 18 },
+  servicesPreview: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#eefaf3',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  servicesPreviewText: {
+    flex: 1,
+    marginLeft: 8,
+    color: '#2e8b57',
+    lineHeight: 18,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  serviceList: {
+    marginTop: 12,
+    borderRadius: 16,
+    backgroundColor: '#eefaf3',
+    overflow: 'hidden',
+  },
+  serviceRow: {
+    minHeight: 42,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dcefe5',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  serviceName: {
+    flex: 1,
+    color: '#16352c',
+    fontSize: 13,
+    fontWeight: '900',
+    paddingRight: 10,
+  },
+  servicePrice: {
+    color: '#2e8b57',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 18 },
   callButton: {
     flex: 1,
+    minWidth: 130,
     backgroundColor: '#e8f6ee',
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
     flexDirection: 'row',
   },
   callText: { color: '#2e8b57', fontWeight: '800', marginLeft: 8 },
+  bookingButton: {
+    flex: 1,
+    minWidth: 130,
+    backgroundColor: '#16352c',
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  bookingText: { color: '#ffffff', fontWeight: '900', marginLeft: 8 },
+  whatsappButton: {
+    flex: 1,
+    minWidth: 130,
+    backgroundColor: '#e7f8f1',
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  whatsappText: { color: '#128c7e', fontWeight: '800', marginLeft: 8 },
   mapButton: {
     flex: 1,
+    minWidth: 130,
     backgroundColor: '#eef5ff',
     paddingVertical: 14,
     borderRadius: 16,

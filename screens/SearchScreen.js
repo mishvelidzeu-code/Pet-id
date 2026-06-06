@@ -24,11 +24,15 @@ import {
   fetchPublicAdoptionPosts,
   fetchPublicClinics,
   fetchPublicEvents,
+  fetchPublicPetHotels,
+  fetchPublicPetTaxis,
 } from '../lib/contentService';
 import AdoptionScreen from './AdoptionScreen';
 import ClinicsScreen from './clinicsScreen';
 import EventsScreen from './iventsScreen';
+import HotelsScreen from './HotelsScreen';
 import OthershopsScreen from './OthershopsScreen'; // დამატებულია ზოომაღაზიების ეკრანი
+import PetTaxiScreen from './PetTaxiScreen';
 import {
   normalizePetCode,
   validatePetCode,
@@ -43,11 +47,15 @@ const { width, height } = Dimensions.get('window');
 
 const SEARCH_CARD_IMAGES = {
   clinics:
-    'https://qclzhlftlkjhgmuqrawk.supabase.co/storage/v1/object/public/pet_photos/pets/dogs/4.webp',
+    'https://qclzhlftlkjhgmuqrawk.supabase.co/storage/v1/object/public/home-images/klinika.webp',
   zooShops:
-    'https://qclzhlftlkjhgmuqrawk.supabase.co/storage/v1/object/public/pet_photos/pets/dogs/2.webp',
+    'https://qclzhlftlkjhgmuqrawk.supabase.co/storage/v1/object/public/home-images/shop.webp',
   events:
-    'https://qclzhlftlkjhgmuqrawk.supabase.co/storage/v1/object/public/pet_photos/pets/dogs/3.webp',
+    'https://qclzhlftlkjhgmuqrawk.supabase.co/storage/v1/object/public/home-images/grumingi.webp',
+  hotels:
+    'https://qclzhlftlkjhgmuqrawk.supabase.co/storage/v1/object/public/home-images/sastumro.webp',
+  taxis:
+    'https://qclzhlftlkjhgmuqrawk.supabase.co/storage/v1/object/public/home-images/taxi.webp',
 };
 
 const MEDICAL_TYPE_OPTIONS = [
@@ -412,6 +420,99 @@ function MyPetsHeroCard({ pets, onOpenProfile, onOpenPassport, onOpenMedical, on
   );
 }
 
+function MyPetsHomeRail({ pets, onOpenPassportPage, onToggleLost }) {
+  if (!pets.length) {
+    return (
+      <TouchableOpacity style={styles.homeAddPetCard} onPress={onOpenPassportPage} activeOpacity={0.88}>
+        <View style={styles.homeAddPetIcon}>
+          <Ionicons name="paw-outline" size={28} color="#2e8b57" />
+        </View>
+        <View style={styles.homeAddPetCopy}>
+          <Text style={styles.homeAddPetTitle}>დაამატე ცხოველი</Text>
+          <Text style={styles.homeAddPetText}>
+            პასპორტის გვერდზე დაამატე ფოტო, Pet ID, პასპორტი და მედ ბარათი.
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#6f837b" />
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <View style={styles.homePetsSection}>
+      <View style={styles.homePetsHeader}>
+        <View style={styles.sectionPill}>
+          <Ionicons name="paw" size={14} color="#2e8b57" />
+          <Text style={styles.sectionPillText}>ჩემი ცხოველები</Text>
+        </View>
+        <TouchableOpacity style={styles.homePetsHeaderAction} onPress={onOpenPassportPage} activeOpacity={0.85}>
+          <Text style={styles.homePetsHeaderActionText}>პასპორტი</Text>
+          <Ionicons name="arrow-forward" size={14} color="#16352c" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.homePetsRail}
+      >
+        {pets.map((pet) => (
+          <TouchableOpacity
+            key={pet.id}
+            style={[styles.homePetCard, pet.is_lost && styles.homePetCardLost]}
+            onPress={onOpenPassportPage}
+            activeOpacity={0.9}
+          >
+            <View style={styles.homePetTopRow}>
+              <View style={styles.homePetPhotoWrap}>
+                {pet.photo_url ? (
+                  <Image source={{ uri: pet.photo_url }} style={styles.homePetPhoto} />
+                ) : (
+                  <View style={[styles.homePetPhoto, styles.homePetPhotoFallback]}>
+                    <Ionicons name="paw-outline" size={28} color="#7b8d86" />
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.homePetInfo}>
+                <Text style={styles.homePetName} numberOfLines={1}>
+                  {pet.name || 'უსახელო'}
+                </Text>
+                <Text style={styles.homePetMeta} numberOfLines={1}>
+                  {[pet.breed, pet.sex, pet.size].filter(Boolean).join(' • ') || 'მონაცემები შესავსებია'}
+                </Text>
+                <View style={styles.homePetCodeBadge}>
+                  <Text style={styles.homePetCodeText}>ID: {pet.short_code || '-'}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.homeSearchModeRow}>
+              <View style={styles.homeSearchModeCopy}>
+                <Text style={styles.homeSearchModeTitle}>ძებნის რეჟიმი</Text>
+                <Text
+                  style={[
+                    styles.homeSearchModeText,
+                    pet.is_lost ? styles.homeSearchModeTextLost : styles.homeSearchModeTextSafe,
+                  ]}
+                >
+                  {pet.is_lost ? 'ჩართულია' : 'გამორთულია'}
+                </Text>
+              </View>
+              <Switch
+                trackColor={{ false: '#d7dee7', true: '#ffd1d1' }}
+                thumbColor={pet.is_lost ? '#ff4d4d' : '#ffffff'}
+                value={pet.is_lost}
+                onValueChange={() => onToggleLost(pet.id, pet.is_lost)}
+              />
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 function LostPreviewCard({ pets, onOpenList, onOpenPet }) {
   const previewPets = pets.slice(0, 2);
 
@@ -508,20 +609,11 @@ export default function SearchScreen({
   const [clinicPreview, setClinicPreview] = useState(null);
   const [eventPreview, setEventPreview] = useState(null);
   const [adoptionPreview, setAdoptionPreview] = useState(null);
+  const [hotelPreview, setHotelPreview] = useState(null);
+  const [taxiPreview, setTaxiPreview] = useState(null);
   const detailScrollRef = useRef(null);
 
   const featuredLostPets = useMemo(() => lostPets.slice(0, 2), [lostPets]);
-  const featuredMyPets = useMemo(() => {
-    if (!myPets.length) {
-      return [];
-    }
-
-    const primaryPet = primaryPetId
-      ? myPets.find((pet) => pet.id === primaryPetId)
-      : null;
-
-    return [primaryPet || myPets[0]];
-  }, [myPets, primaryPetId]);
   const filteredMedicalRecords = useMemo(() => {
     if (!medicalFilter) {
       return medicalRecords;
@@ -543,6 +635,8 @@ export default function SearchScreen({
         fetchPublicAdoptionPosts(),
         fetchPublicClinics(),
         fetchPublicEvents(),
+        fetchPublicPetHotels(),
+        fetchPublicPetTaxis(),
       ];
 
       if (session?.user?.id) {
@@ -556,7 +650,15 @@ export default function SearchScreen({
       }
 
       const results = await Promise.all(requests);
-      const [lostResult, adoptionResult, clinicsResult, eventsResult, myPetsResult] = results;
+      const [
+        lostResult,
+        adoptionResult,
+        clinicsResult,
+        eventsResult,
+        hotelsResult,
+        taxisResult,
+        myPetsResult,
+      ] = results;
 
       if (!lostResult.error && lostResult.data) {
         setLostPets(prioritizeLostPets(lostResult.data, priorityLostId));
@@ -565,6 +667,8 @@ export default function SearchScreen({
       setAdoptionPreview((adoptionResult.data || [])[0] || null);
       setClinicPreview((clinicsResult.data || [])[0] || null);
       setEventPreview((eventsResult.data || [])[0] || null);
+      setHotelPreview((hotelsResult.data || [])[0] || null);
+      setTaxiPreview((taxisResult.data || [])[0] || null);
       setMyPets(myPetsResult?.data || []);
       setHomeLoading(false);
       setRefreshing(false);
@@ -592,7 +696,15 @@ export default function SearchScreen({
     const searchView = route?.params?.searchView;
 
     // დაემატა othershops შემოწმებაშიც
-    if (searchView === 'events' || searchView === 'clinics' || searchView === 'adoption' || searchView === 'othershops' || searchView === 'lost') {
+    if (
+      searchView === 'events' ||
+      searchView === 'clinics' ||
+      searchView === 'adoption' ||
+      searchView === 'othershops' ||
+      searchView === 'hotels' ||
+      searchView === 'taxis' ||
+      searchView === 'lost'
+    ) {
       setSelectedPet(null);
       setActiveView(searchView === 'lost' ? 'lost' : searchView);
     }
@@ -740,11 +852,19 @@ export default function SearchScreen({
   };
 
   if (activeView === 'events') {
-    return <EventsScreen onBack={() => setActiveView('home')} />;
+    return <EventsScreen onBack={() => setActiveView('home')} session={session} profile={profile} />;
   }
 
   if (activeView === 'clinics') {
-    return <ClinicsScreen onBack={() => setActiveView('home')} />;
+    return <ClinicsScreen onBack={() => setActiveView('home')} session={session} profile={profile} />;
+  }
+
+  if (activeView === 'hotels') {
+    return <HotelsScreen onBack={() => setActiveView('home')} session={session} profile={profile} />;
+  }
+
+  if (activeView === 'taxis') {
+    return <PetTaxiScreen onBack={() => setActiveView('home')} session={session} profile={profile} />;
   }
 
   if (activeView === 'adoption') {
@@ -753,7 +873,7 @@ export default function SearchScreen({
 
   // დაემატა othershops-ის ეკრანის გამოძახება
   if (activeView === 'othershops') {
-    return <OthershopsScreen onBack={() => setActiveView('home')} />;
+    return <OthershopsScreen onBack={() => setActiveView('home')} session={session} profile={profile} />;
   }
 
   return (
@@ -945,7 +1065,7 @@ export default function SearchScreen({
                   title="ზოო-Shops"
                   subtitle="უახლოესი ზოომაღაზიები"
                   imageUrl={SEARCH_CARD_IMAGES.zooShops}
-                  tintColor="rgba(23, 55, 45, 0.84)"
+                  tintColor="rgba(23, 55, 45, 0.46)"
                   icon="cart-outline"
                   onPress={() => setActiveView('othershops')}
                 />
@@ -953,9 +1073,28 @@ export default function SearchScreen({
                   title="კლინიკები"
                   subtitle="ვეტ-კლინიკები რუკით"
                   imageUrl={SEARCH_CARD_IMAGES.clinics}
-                  tintColor="rgba(7, 84, 138, 0.82)"
+                  tintColor="rgba(7, 84, 138, 0.44)"
                   icon="medical-outline"
                   onPress={() => setActiveView('clinics')}
+                />
+              </View>
+
+              <View style={styles.quickGrid}>
+                <FeatureCard
+                  title="სასტუმროები"
+                  subtitle={hotelPreview?.name ? `${hotelPreview.name}` : 'უახლოესი pet hotel'}
+                  imageUrl={SEARCH_CARD_IMAGES.hotels}
+                  tintColor="rgba(72, 38, 130, 0.44)"
+                  icon="bed-outline"
+                  onPress={() => setActiveView('hotels')}
+                />
+                <FeatureCard
+                  title="Pet Taxi"
+                  subtitle={taxiPreview?.name ? `${taxiPreview.name}` : 'ცხოველის ტრანსპორტი'}
+                  imageUrl={SEARCH_CARD_IMAGES.taxis}
+                  tintColor="rgba(13, 82, 77, 0.44)"
+                  icon="car-outline"
+                  onPress={() => setActiveView('taxis')}
                 />
               </View>
 
@@ -969,29 +1108,23 @@ export default function SearchScreen({
                       : 'იპოვე ოთხფეხა მეგობარი'
                   }
                   imageUrl={adoptionPreview?.image_url}
-                  tintColor="rgba(16, 41, 33, 0.78)"
+                  tintColor="rgba(16, 41, 33, 0.42)"
                   icon="home-outline"
                   onPress={() => setActiveView('adoption')}
                 />
                 <FeatureCard
-                  title="ივენთები"
-                  subtitle="შეხვედრები და აქტივობები"
+                  title="გრუმინგი & ბარბერი"
+                  subtitle="შეჭრა, დაბანა და მოვლა ახლოს"
                   imageUrl={SEARCH_CARD_IMAGES.events}
-                  tintColor="rgba(110, 48, 22, 0.82)"
-                  icon="calendar-outline"
+                  tintColor="rgba(110, 48, 22, 0.44)"
+                  icon="cut-outline"
                   onPress={() => setActiveView('events')}
                 />
               </View>
 
-              <MyPetsHeroCard
-                pets={featuredMyPets}
-                style={styles.myPetsCardHero}
-                onOpenProfile={() => navigation.navigate('Profile')}
-                onOpenPassport={(imageUrl) => {
-                  setZoomImage(imageUrl);
-                  setIsZoomVisible(true);
-                }}
-                onOpenMedical={openMedicalCard}
+              <MyPetsHomeRail
+                pets={myPets}
+                onOpenPassportPage={() => navigation.navigate('Shop')}
                 onToggleLost={confirmToggleMyPetLost}
               />
 
@@ -1341,12 +1474,12 @@ const styles = StyleSheet.create({
   quickGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 18,
+    marginBottom: 12,
   },
   featureCard: {
     width: '48.3%',
-    minHeight: 206,
-    borderRadius: 28,
+    minHeight: 154,
+    borderRadius: 22,
     overflow: 'hidden',
     backgroundColor: '#24453a',
     justifyContent: 'space-between',
@@ -1368,30 +1501,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 12,
+    paddingTop: 12,
   },
   featureIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   featureCopy: {
-    padding: 16,
+    padding: 12,
   },
   featureTitle: {
     color: '#fff',
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: '900',
+    textShadowColor: 'rgba(0,0,0,0.34)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   featureSubtitle: {
-    marginTop: 6,
+    marginTop: 4,
     color: 'rgba(255,255,255,0.86)',
-    lineHeight: 18,
-    fontSize: 13,
+    lineHeight: 16,
+    fontSize: 11,
+    textShadowColor: 'rgba(0,0,0,0.32)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   myPetsCard: {
     backgroundColor: '#123a30',
@@ -1410,6 +1549,166 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 16,
     minHeight: 0,
+  },
+  homeAddPetCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e3ebe6',
+    shadowColor: '#10231a',
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  homeAddPetIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: '#eefaf3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  homeAddPetCopy: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  homeAddPetTitle: {
+    color: '#16352c',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  homeAddPetText: {
+    marginTop: 5,
+    color: '#6c8279',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  homePetsSection: {
+    marginBottom: 16,
+  },
+  homePetsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  homePetsHeaderAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eef4f0',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  homePetsHeaderActionText: {
+    color: '#16352c',
+    fontSize: 12,
+    fontWeight: '900',
+    marginRight: 5,
+  },
+  homePetsRail: {
+    paddingRight: 20,
+  },
+  homePetCard: {
+    width: Math.min(width - 54, 330),
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 14,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#e4eee8',
+    shadowColor: '#10231a',
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  homePetCardLost: {
+    borderColor: '#ffd7d7',
+    backgroundColor: '#fffafa',
+  },
+  homePetTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  homePetPhotoWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 23,
+    overflow: 'hidden',
+    backgroundColor: '#dde7e2',
+    marginRight: 12,
+  },
+  homePetPhoto: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  homePetPhotoFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homePetInfo: {
+    flex: 1,
+    paddingRight: 4,
+  },
+  homePetName: {
+    color: '#16352c',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  homePetMeta: {
+    marginTop: 5,
+    color: '#6c8279',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  homePetCodeBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 9,
+    backgroundColor: '#eefaf3',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  homePetCodeText: {
+    color: '#2e8b57',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  homeSearchModeRow: {
+    marginTop: 13,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#edf2ef',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  homeSearchModeCopy: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  homeSearchModeTitle: {
+    color: '#536b61',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  homeSearchModeText: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  homeSearchModeTextSafe: {
+    color: '#2e8b57',
+  },
+  homeSearchModeTextLost: {
+    color: '#dc2626',
   },
   myPetsHeader: {
     flexDirection: 'row',

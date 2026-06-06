@@ -15,55 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { fetchPublicGroomingBusinesses } from '../lib/contentService';
 import BookingRequestModal from '../components/BookingRequestModal';
-
-const GROOMING_SERVICES = [
-  {
-    id: 'groom-1',
-    name: 'Happy Paws Grooming',
-    address: 'ვაკე, ფალიაშვილის 41',
-    phone: '+995599111222',
-    lat: 41.7097,
-    lng: 44.7604,
-    image_url: 'https://qclzhlftlkjhgmuqrawk.supabase.co/storage/v1/object/public/pet_photos/pets/dogs/1.webp',
-    services: 'ბანაობა, შეჭრა, ფრჩხილები',
-    price: '35 ₾-დან',
-  },
-  {
-    id: 'groom-2',
-    name: 'Pet Barber Studio',
-    address: 'საბურთალო, პეკინის 12',
-    phone: '+995599333444',
-    lat: 41.7258,
-    lng: 44.7699,
-    image_url: 'https://qclzhlftlkjhgmuqrawk.supabase.co/storage/v1/object/public/pet_photos/pets/dogs/2.webp',
-    services: 'ბარბერი, ვარცხნილობა, ყურების წმენდა',
-    price: '45 ₾-დან',
-  },
-  {
-    id: 'groom-3',
-    name: 'Clean Dog Tbilisi',
-    address: 'ისანი, ქეთევან წამებულის 68',
-    phone: '+995599555666',
-    lat: 41.6911,
-    lng: 44.836,
-    image_url: 'https://qclzhlftlkjhgmuqrawk.supabase.co/storage/v1/object/public/pet_photos/pets/dogs/3.webp',
-    services: 'ჰიგიენური შეჭრა, დაბანა, დეზოდორირება',
-    price: '30 ₾-დან',
-  },
-  {
-    id: 'groom-4',
-    name: 'Fluffy Room',
-    address: 'დიდუბე, წერეთლის 118',
-    phone: '+995599777888',
-    lat: 41.7422,
-    lng: 44.7796,
-    image_url: 'https://qclzhlftlkjhgmuqrawk.supabase.co/storage/v1/object/public/pet_photos/pets/dogs/4.webp',
-    services: 'კატების გრუმინგი, ძაღლის მოვლა, სპა',
-    price: '40 ₾-დან',
-  },
-];
 
 function getDistance(lat1, lon1, lat2, lon2) {
   const radius = 6371;
@@ -85,7 +37,7 @@ function formatDistance(value) {
   return `${value.toFixed(1)} კმ`;
 }
 
-function ScreenHeader({ onBack }) {
+function ScreenHeader({ title, subtitle, onBack }) {
   return (
     <View style={styles.header}>
       {onBack ? (
@@ -94,49 +46,66 @@ function ScreenHeader({ onBack }) {
         </TouchableOpacity>
       ) : null}
       <View style={styles.headerCopy}>
-        <Text style={styles.headerTitle}>გრუმინგი & ბარბერი</Text>
-        <Text style={styles.headerSubtitle}>
-          იპოვე ახლომდებარე გრუმინგი, დარეკე ან გაუშვი მარშრუტი.
-        </Text>
+        <Text style={styles.headerTitle}>{title}</Text>
+        <Text style={styles.headerSubtitle}>{subtitle}</Text>
       </View>
     </View>
   );
 }
 
-export default function EventsScreen({ onBack = null, session = null, profile = null }) {
-  const [services, setServices] = useState([]);
+export default function NearbyServicesScreen({
+  title,
+  subtitle,
+  searchPlaceholder,
+  emptyText,
+  emptySearchText,
+  iconName,
+  iconColor = '#2e8b57',
+  fetchItems,
+  onBack = null,
+  session = null,
+  profile = null,
+}) {
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [bookingItem, setBookingItem] = useState(null);
 
-  const visibleServices = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return services;
+  const visibleItems = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    return services.filter((item) => {
-      const text = `${item.name || ''} ${item.address || ''} ${item.services || ''}`.toLowerCase();
-      return text.includes(query);
+    if (!normalizedQuery) {
+      return items;
+    }
+
+    return items.filter((item) => {
+      const name = String(item.name || '').toLowerCase();
+      const address = String(item.address || '').toLowerCase();
+      const description = String(item.description || '').toLowerCase();
+      const servicesPreview = String(item.services_preview || '').toLowerCase();
+      return (
+        name.includes(normalizedQuery) ||
+        address.includes(normalizedQuery) ||
+        description.includes(normalizedQuery) ||
+        servicesPreview.includes(normalizedQuery)
+      );
     });
-  }, [searchQuery, services]);
+  }, [items, searchQuery]);
 
   useEffect(() => {
-    loadServices();
+    loadItems();
   }, []);
 
-  async function loadServices(withRefresh = false) {
-    if (withRefresh) setRefreshing(true);
-    else setLoading(true);
+  async function loadItems(withRefresh = false) {
+    if (withRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
 
-    const { data } = await fetchPublicGroomingBusinesses();
-    let nextServices = (data || []).length
-      ? data.map((item) => ({
-          ...item,
-          services: item.services_preview || item.description || '',
-          service_items: item.services || [],
-          price: item.services_preview ? 'სერვისები და ფასები' : 'ფასი შეთანხმებით',
-        }))
-      : [...GROOMING_SERVICES];
+    const { data } = await fetchItems();
+    let nextItems = data || [];
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -144,9 +113,15 @@ export default function EventsScreen({ onBack = null, session = null, profile = 
         const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
-        nextServices = nextServices
+
+        nextItems = nextItems
           .map((item) => {
-            if (item.lat == null || item.lng == null || Number.isNaN(item.lat) || Number.isNaN(item.lng)) {
+            if (
+              item.lat == null ||
+              item.lng == null ||
+              Number.isNaN(item.lat) ||
+              Number.isNaN(item.lng)
+            ) {
               return item;
             }
 
@@ -160,15 +135,28 @@ export default function EventsScreen({ onBack = null, session = null, profile = 
               ),
             };
           })
-          .sort((a, b) => (a.distance ?? 999) - (b.distance ?? 999));
+          .sort((a, b) => {
+            if (a.distance == null) return 1;
+            if (b.distance == null) return -1;
+            return a.distance - b.distance;
+          });
       }
     } catch (error) {
-      console.log('Grooming location error:', error);
+      console.log('Nearby service location error:', error);
     }
 
-    setServices(nextServices);
+    setItems(nextItems);
     setLoading(false);
     setRefreshing(false);
+  }
+
+  function openMaps(item) {
+    const url =
+      item.google_maps_url ||
+      `https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}`;
+    Linking.openURL(url).catch(() =>
+      Alert.alert('შეცდომა', 'რუკის გახსნა ვერ მოხერხდა.')
+    );
   }
 
   function makeCall(phone) {
@@ -194,33 +182,19 @@ export default function EventsScreen({ onBack = null, session = null, profile = 
     );
   }
 
-  function openMaps(item) {
-    const url =
-      item.google_maps_url ||
-      `https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}`;
-    Linking.openURL(url).catch(() =>
-      Alert.alert('შეცდომა', 'რუკის გახსნა ვერ მოხერხდა.')
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader onBack={onBack} />
+      <ScreenHeader title={title} subtitle={subtitle} onBack={onBack} />
 
       <View style={styles.searchWrap}>
         <Ionicons name="search-outline" size={18} color="#6a7f76" />
         <TextInput
           style={styles.searchInput}
-          placeholder="მოძებნე გრუმერი, უბანი ან სერვისი"
+          placeholder={searchPlaceholder}
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholderTextColor="#8ca097"
         />
-        {searchQuery ? (
-          <TouchableOpacity style={styles.clearSearch} onPress={() => setSearchQuery('')}>
-            <Ionicons name="close" size={16} color="#6a7f76" />
-          </TouchableOpacity>
-        ) : null}
       </View>
 
       {loading ? (
@@ -232,18 +206,27 @@ export default function EventsScreen({ onBack = null, session = null, profile = 
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => loadServices(true)} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => loadItems(true)} />
           }
         >
-          {!visibleServices.length ? (
+          {visibleItems.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyText}>გრუმინგი ვერ მოიძებნა.</Text>
+              <Text style={styles.emptyText}>
+                {searchQuery.trim() ? emptySearchText : emptyText}
+              </Text>
             </View>
           ) : (
-            visibleServices.map((item, index) => (
+            visibleItems.map((item, index) => (
               <View key={item.id} style={styles.card}>
                 <View style={styles.imageWrap}>
-                  <Image source={{ uri: item.image_url }} style={styles.image} />
+                  {item.image_url ? (
+                    <Image source={{ uri: item.image_url }} style={styles.image} />
+                  ) : (
+                    <View style={[styles.image, styles.imageFallback]}>
+                      <Ionicons name={iconName} size={42} color="#90a49c" />
+                    </View>
+                  )}
+
                   {index === 0 && item.distance != null ? (
                     <View style={styles.closestBadge}>
                       <Text style={styles.closestBadgeText}>ყველაზე ახლო</Text>
@@ -257,24 +240,25 @@ export default function EventsScreen({ onBack = null, session = null, profile = 
                 </View>
 
                 <View style={styles.cardBody}>
-                  <Text style={styles.title}>{item.name}</Text>
-                  <View style={styles.pricePill}>
-                    <Ionicons name="cut-outline" size={15} color="#2e8b57" />
-                    <Text style={styles.pricePillText}>{item.price}</Text>
-                  </View>
-                  <View style={styles.metaRow}>
-                    <Ionicons name="location-outline" size={16} color="#0066cc" />
-                    <Text style={styles.meta}>{item.address}</Text>
-                  </View>
-                  {item.working_hours ? (
-                    <View style={styles.metaRow}>
-                      <Ionicons name="time-outline" size={16} color="#2e8b57" />
-                      <Text style={styles.meta}>{item.working_hours}</Text>
+                  <Text style={styles.name}>{item.name}</Text>
+                  {item.address ? (
+                    <View style={styles.addressRow}>
+                      <Ionicons name="location-outline" size={16} color="#0066cc" />
+                      <Text style={styles.address}>{item.address}</Text>
                     </View>
                   ) : null}
-                  {item.service_items?.length ? (
+                  {item.working_hours ? (
+                    <View style={styles.addressRow}>
+                      <Ionicons name="time-outline" size={16} color="#2e8b57" />
+                      <Text style={styles.address}>{item.working_hours}</Text>
+                    </View>
+                  ) : null}
+                  {item.description ? (
+                    <Text style={styles.description}>{item.description}</Text>
+                  ) : null}
+                  {item.services?.length ? (
                     <View style={styles.serviceList}>
-                      {item.service_items.slice(0, 5).map((service) => (
+                      {item.services.slice(0, 5).map((service) => (
                         <View key={service.id} style={styles.serviceRow}>
                           <Text style={styles.serviceName} numberOfLines={1}>
                             {service.title}
@@ -283,31 +267,52 @@ export default function EventsScreen({ onBack = null, session = null, profile = 
                         </View>
                       ))}
                     </View>
-                  ) : (
-                    <Text style={styles.description}>{item.services}</Text>
-                  )}
+                  ) : item.services_preview ? (
+                    <View style={styles.servicesPreview}>
+                      <Ionicons name={iconName} size={14} color={iconColor} />
+                      <Text style={[styles.servicesPreviewText, { color: iconColor }]}>
+                        {item.services_preview}
+                      </Text>
+                    </View>
+                  ) : null}
 
                   <View style={styles.actions}>
                     {item.business_id ? (
-                      <TouchableOpacity style={styles.bookingButton} onPress={() => setBookingItem(item)}>
+                      <TouchableOpacity
+                        style={styles.bookingButton}
+                        onPress={() => setBookingItem(item)}
+                        activeOpacity={0.8}
+                      >
                         <Ionicons name="calendar-outline" size={16} color="#ffffff" />
                         <Text style={styles.bookingText}>დაჯავშნა</Text>
                       </TouchableOpacity>
                     ) : null}
-                    <TouchableOpacity style={styles.callButton} onPress={() => makeCall(item.phone)}>
+                    <TouchableOpacity
+                      style={styles.callButton}
+                      onPress={() => makeCall(item.phone)}
+                      activeOpacity={0.8}
+                    >
                       <Ionicons name="call-outline" size={16} color="#2e8b57" />
                       <Text style={styles.callText}>დარეკვა</Text>
                     </TouchableOpacity>
                     {item.whatsapp ? (
-                      <TouchableOpacity style={styles.whatsappButton} onPress={() => openWhatsApp(item.whatsapp)}>
+                      <TouchableOpacity
+                        style={styles.whatsappButton}
+                        onPress={() => openWhatsApp(item.whatsapp)}
+                        activeOpacity={0.8}
+                      >
                         <Ionicons name="logo-whatsapp" size={16} color="#128c7e" />
                         <Text style={styles.whatsappText}>WhatsApp</Text>
                       </TouchableOpacity>
                     ) : null}
                     {item.google_maps_url || (item.lat != null && item.lng != null) ? (
-                      <TouchableOpacity style={styles.mapButton} onPress={() => openMaps(item)}>
-                        <Ionicons name="navigate-outline" size={16} color="#0066cc" />
-                        <Text style={styles.mapText}>მარშრუტი</Text>
+                      <TouchableOpacity
+                        style={styles.mapButton}
+                        onPress={() => openMaps(item)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="navigate-outline" size={16} color={iconColor} />
+                        <Text style={[styles.mapText, { color: iconColor }]}>მარშრუტი</Text>
                       </TouchableOpacity>
                     ) : null}
                   </View>
@@ -349,7 +354,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 14,
   },
-  headerCopy: { flex: 1 },
+  headerCopy: {
+    flex: 1,
+  },
   headerTitle: { fontSize: 28, fontWeight: '800', color: '#16352c' },
   headerSubtitle: { marginTop: 6, color: '#6a7f76', lineHeight: 19 },
   searchWrap: {
@@ -372,30 +379,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-  clearSearch: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#eef4f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { padding: 18, paddingBottom: 70 },
   empty: { backgroundColor: '#fff', borderRadius: 24, padding: 30, alignItems: 'center' },
   emptyText: { color: '#687b74', fontWeight: '700', textAlign: 'center' },
   card: {
     backgroundColor: '#fff',
-    borderRadius: 28,
+    borderRadius: 26,
     overflow: 'hidden',
-    marginBottom: 18,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowRadius: 16,
     elevation: 4,
   },
-  imageWrap: { height: 210, backgroundColor: '#dde6e2' },
+  imageWrap: { height: 176, backgroundColor: '#dde6e2' },
   image: { width: '100%', height: '100%', resizeMode: 'cover' },
+  imageFallback: {
+    backgroundColor: '#dde6e2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   closestBadge: {
     position: 'absolute',
     top: 14,
@@ -416,26 +420,41 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   distanceText: { color: '#16352c', fontWeight: '800', fontSize: 11 },
-  cardBody: { padding: 20 },
-  title: { fontSize: 23, fontWeight: '800', color: '#16352c' },
-  pricePill: {
-    alignSelf: 'flex-start',
+  cardBody: { padding: 18 },
+  name: { fontSize: 21, fontWeight: '800', color: '#16352c' },
+  addressRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#eefaf3',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    alignItems: 'flex-start',
     marginTop: 10,
   },
-  pricePillText: { color: '#2e8b57', fontWeight: '900', marginLeft: 6 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
-  meta: { marginLeft: 8, color: '#687b74', fontWeight: '700', flex: 1 },
-  description: { marginTop: 12, color: '#6b7f78', lineHeight: 21, fontWeight: '600' },
+  address: { color: '#687b74', marginLeft: 8, lineHeight: 20, flex: 1 },
+  description: {
+    marginTop: 10,
+    color: '#6b7f78',
+    lineHeight: 20,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  servicesPreview: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#f0f7f4',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  servicesPreviewText: {
+    flex: 1,
+    marginLeft: 8,
+    lineHeight: 18,
+    fontSize: 12,
+    fontWeight: '900',
+  },
   serviceList: {
     marginTop: 12,
     borderRadius: 16,
-    backgroundColor: '#eefaf3',
+    backgroundColor: '#f0f7f4',
     overflow: 'hidden',
   },
   serviceRow: {
@@ -443,7 +462,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#dcefe5',
+    borderBottomColor: '#dfece6',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -504,5 +523,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
   },
-  mapText: { color: '#0066cc', fontWeight: '800', marginLeft: 8 },
+  mapText: { fontWeight: '800', marginLeft: 8 },
 });

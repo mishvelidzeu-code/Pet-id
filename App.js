@@ -13,6 +13,7 @@ import AuthScreen from './screens/authScreen';
 import SearchScreen from './screens/SearchScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import HelpScreen from './screens/helpScreen';
+import AssistantScreen from './screens/AssistantScreen';
 import AdminScreen from './screens/AdminScreen';
 import ShopScreen from './screens/ShopScreen';
 import AppUpdateManager from './components/AppUpdateManager';
@@ -151,21 +152,38 @@ export default function App() {
           <Tab.Navigator
             screenOptions={({ route }) => ({
               headerShown: false,
-              tabBarIcon: ({ color, size }) => {
+              tabBarIcon: ({ color, focused }) => {
                 let iconName = 'ellipse';
 
                 if (route.name === 'Search') iconName = 'home';
-                else if (route.name === 'Help') iconName = 'help-circle';
-                else if (route.name === 'Shop') iconName = 'bag-handle';
+                else if (route.name === 'Help') iconName = 'help-buoy';
+                else if (route.name === 'Assistant') iconName = 'sparkles';
+                else if (route.name === 'Shop') iconName = 'id-card';
                 else if (route.name === 'Profile') iconName = 'person';
                 else if (route.name === 'Admin') iconName = 'shield-checkmark';
 
-                return <Ionicons name={iconName} size={size} color={color} />;
+                return (
+                  <View
+                    style={[
+                      styles.tabIconWrap,
+                      route.name === 'Assistant' && styles.assistantTabIconWrap,
+                      focused && styles.tabIconWrapActive,
+                      route.name === 'Assistant' && focused && styles.assistantTabIconWrapActive,
+                    ]}
+                  >
+                    <Ionicons
+                      name={iconName}
+                      size={route.name === 'Assistant' ? 24 : focused ? 22 : 20}
+                      color={route.name === 'Assistant' ? '#ffffff' : color}
+                    />
+                  </View>
+                );
               },
-              tabBarActiveTintColor: '#2e8b57',
-              tabBarInactiveTintColor: 'gray',
-              tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
-              tabBarStyle: { height: 68, paddingBottom: 8, paddingTop: 6 },
+              tabBarActiveTintColor: '#16352c',
+              tabBarInactiveTintColor: '#7b8d86',
+              tabBarLabelStyle: styles.tabBarLabel,
+              tabBarItemStyle: styles.tabBarItem,
+              tabBarStyle: styles.tabBar,
             })}
           >
             <Tab.Screen name="Search" options={{ title: 'მთავარი' }}>
@@ -186,8 +204,20 @@ export default function App() {
               component={HelpScreen}
               options={{ title: 'დახმარება' }}
             />
-            <Tab.Screen name="Shop" options={{ title: 'მაღაზია' }}>
-              {() => <ShopScreen session={session} profile={profile} />}
+            <Tab.Screen
+              name="Assistant"
+              component={AssistantScreen}
+              options={{ title: 'ასისტენტი' }}
+            />
+            <Tab.Screen name="Shop" options={{ title: 'პასპორტი' }}>
+              {(props) => (
+                <ShopScreen
+                  {...props}
+                  session={session}
+                  petsRefreshToken={petsRefreshToken}
+                  onPetsChanged={handlePetsChanged}
+                />
+              )}
             </Tab.Screen>
             <Tab.Screen name="Profile" options={{ title: 'პროფილი' }}>
               {() => (
@@ -220,5 +250,50 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f4f6f9',
+  },
+  tabBar: {
+    height: 76,
+    paddingTop: 8,
+    paddingBottom: 10,
+    paddingHorizontal: 8,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#e3ebe6',
+    shadowColor: '#0f241d',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 16,
+  },
+  tabBarItem: {
+    borderRadius: 18,
+  },
+  tabBarLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  tabIconWrap: {
+    width: 38,
+    height: 30,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIconWrapActive: {
+    backgroundColor: '#e7f4ee',
+  },
+  assistantTabIconWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 22,
+    backgroundColor: '#16352c',
+    marginTop: -28,
+    shadowColor: '#16352c',
+    shadowOpacity: 0.26,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  assistantTabIconWrapActive: {
+    backgroundColor: '#2e8b57',
   },
 });

@@ -19,7 +19,13 @@
     "plugins": [
       "expo-updates",
       "expo-notifications",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Georgian Pets uses your location to sort nearby veterinary clinics and pet shops by distance, for example showing the closest clinic first."
+        }
+      ]
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -31,7 +37,8 @@
       "requireFullScreen": true,
       "bundleIdentifier": "com.mishvela1.petidapp",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Georgian Pets uses your location to sort nearby veterinary clinics and pet shops by distance, for example showing the closest clinic first."
       }
     },
     "android": {
