@@ -220,7 +220,7 @@ export default function HelpScreen() {
           <View style={styles.heroGlowOne} />
           <View style={styles.heroGlowTwo} />
 
-          <Text style={styles.heroEyebrow}>PET ID CARE</Text>
+          <Text style={styles.heroEyebrow}>GEORGIAN PETS CARE</Text>
           <Text style={styles.heroTitle}>სატესტო რეჟიმი</Text>
           <Text style={styles.heroText}>
             აქ ჩანს ცხოველები, რომლებსაც მხოლოდ გვერდის სატესტო
@@ -238,10 +238,10 @@ export default function HelpScreen() {
         <View style={styles.donationHubCard}>
           <View style={styles.donationHubHeader}>
             <View>
-              <Text style={styles.donationHubTitle}>განავითარე Pet ID</Text>
+              <Text style={styles.donationHubTitle}>განავითარე Georgian Pets</Text>
               <Text style={styles.donationHubText}>
                 შენი მხარდაჭერა გვეხმარება სერვერის, შენახვისა და ახალი ფუნქციების
-                დაფინანსებაში.
+                დაფინანსებაში, რათა აპი უფრო სწრაფი, სასარგებლო და უსაფრთხო იყოს.
               </Text>
             </View>
             <View style={styles.donationHubIcon}>
@@ -264,12 +264,6 @@ export default function HelpScreen() {
             onCopy={copyToClipboard}
           />
         </View>
-
-        <InfoCard
-          icon="mail-open-outline"
-          title="როგორ დავამატოთ დასახმარებელი ცხოველი?"
-          text={`მოგვწერე ელ-ფოსტაზე ${supportEmail}. გამოგვიგზავნე ვეტ-ექიმის დასკვნა, ფოტოები, ისტორია და საბანკო დეტალები.`}
-        />
 
         <InfoCard
           icon="shield-checkmark-outline"
@@ -328,6 +322,12 @@ export default function HelpScreen() {
             </Text>
           </View>
         )}
+
+        <InfoCard
+          icon="mail-open-outline"
+          title="როგორ დავამატოთ დასახმარებელი ცხოველი?"
+          text={`მოგვწერე ელ-ფოსტაზე ${supportEmail}. გამოგვიგზავნე ვეტ-ექიმის დასკვნა, ფოტოები, ისტორია და საბანკო დეტალები.`}
+        />
 
         <TouchableOpacity
           style={styles.contactCard}
